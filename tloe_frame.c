@@ -29,3 +29,16 @@ int tloe_set_ack(TloeFrame *frame, int ack) {
 int tloe_get_ack(TloeFrame *frame) {
     return frame->ack;
 }
+
+int tloe_set_mask(TloeFrame *frame, int mask) {
+    frame->mask = mask;
+    return mask;
+}
+
+int tloe_get_mask(TloeFrame *frame) {
+    return frame->mask;
+}
+
+int is_ack_msg(TloeFrame *frame) {
+	return (frame->mask == 0);
+}

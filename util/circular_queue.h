@@ -9,12 +9,11 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#define QUEUE_SIZE 5  // >= WINDOW_SIZE + 1
-
 typedef struct {
-    void* data[QUEUE_SIZE];
+    void** data;
     int front;
     int rear;
+	int capacity;
 
     pthread_mutex_t lock; // Mutex for thread-safe operations
     pthread_cond_t cond; // Condition variable for signaling
@@ -25,6 +24,7 @@ typedef struct {
     int next;
 } CircularQueueIter;
 
+CircularQueue* create_queue(int size);
 void init_queue(CircularQueue *queue);
 bool is_queue_empty(CircularQueue *queue);
 bool is_queue_full(CircularQueue *queue);
