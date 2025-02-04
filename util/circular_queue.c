@@ -8,34 +8,35 @@
 #include <sys/stat.h>
 #include "circular_queue.h"
 
-CircularQueue* create_queue(int size) {
-    if (size <= 0) return NULL; // 유효하지 않은 크기 방지
-
-    CircularQueue *queue = (CircularQueue *)malloc(sizeof(CircularQueue));
-    if (!queue) return NULL; // 메모리 할당 실패
-
-    queue->data = (void **)malloc(sizeof(void *) * size);
-    if (!queue->data) {
-        free(queue);
-        return NULL;
-    }
-
+void init_queue(CircularQueue *queue, int size) {
     queue->front = 0;
     queue->rear = 0;
-    queue->capacity = size; // 설정된 크기 저장
+    queue->size = size;
 
     pthread_mutex_init(&queue->lock, NULL);
     pthread_cond_init(&queue->cond, NULL);
-
-    return queue;
 }
 
-void init_queue(CircularQueue *queue) {
-    queue->front = 0;
-    queue->rear = 0;
+CircularQueue *create_queue(int size) {
+    CircularQueue *cq = (CircularQueue *) malloc (sizeof(CircularQueue) + size*sizeof(void *));
+    init_queue(cq, size);
 
-    pthread_mutex_init(&queue->lock, NULL);
-    pthread_cond_init(&queue->cond, NULL);
+    return cq;
+}
+
+void delete_queue(CircularQueue *q) {
+    int i;
+    void *e;
+
+    if (!q) 
+        return;
+
+    for (i=q->front; i != q->rear; i = (i+1) % q->size) {
+        e = q->data[i];
+        if (e) free(e);
+    }
+
+    free(q);
 }
 
 bool is_queue_empty(CircularQueue *queue) {
@@ -43,7 +44,7 @@ bool is_queue_empty(CircularQueue *queue) {
 }
 
 bool is_queue_full(CircularQueue *queue) {
-    return (queue->rear + 1) % queue->capacity == queue->front;
+    return (queue->rear + 1) % queue->size == queue->front;
 }
 
 bool enqueue(CircularQueue *queue, void *data) {
@@ -51,7 +52,7 @@ bool enqueue(CircularQueue *queue, void *data) {
         return false; // 큐가 가득 참
     }
     queue->data[queue->rear] = data;
-    queue->rear = (queue->rear + 1) % queue->capacity;
+    queue->rear = (queue->rear + 1) % queue->size;
     return true;
 }
 
@@ -61,7 +62,7 @@ void* dequeue(CircularQueue *queue) {
 
     if (!is_queue_empty(queue)) {
         data = queue->data[queue->front];
-        queue->front = (queue->front + 1) % queue->capacity;
+        queue->front = (queue->front + 1) % queue->size;
     }
 
     return data;
@@ -75,7 +76,7 @@ void printqueue(CircularQueue *queue) {
 	int i;
        
 	printf("front: %d, rear: %d\n", queue->front, queue->rear);
-	for (i=queue->front; i != queue->rear; i = (i+1) % queue->capacity) {
+	for (i=queue->front; i != queue->rear; i = (i+1) % queue->size) {
 		printf("%p ", queue->data[i]);
 	}
 	printf("\n");
@@ -89,3 +90,5 @@ CircularQueueIter *queue_iter(CircularQueue *q) {
     }
     return cqi;
 }
+
+

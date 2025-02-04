@@ -25,7 +25,6 @@
 
 // 패킷 구조체 (이전 코드와 동일)
 typedef struct {
-    int seq_num;
     int state;
     time_t send_time; // 패킷 전송 시간 기록
     TloeFrame tloe_frame;
@@ -38,6 +37,7 @@ bool isTimeout(time_t send_time) {
 CircularQueue *retransmit_buffer;
 CircularQueue *rx_buffer;
 CircularQueue *message_buffer;
+CircularQueue *ack_buffer;
 
 int next_tx_seq = 0;
 int next_rx_seq = 0;
@@ -59,12 +59,14 @@ int retransmit(TloeEther *ether, int seq_num_nack) {
     // update ACKD_SEQ ????
     // retransmit 
     n = 0;
-    for (i=retransmit_buffer->front; i != retransmit_buffer->rear; i++){
+    for (i=retransmit_buffer->front; i != retransmit_buffer->rear; i = (i + 1) % retransmit_buffer->size){
         RetransmitBufferElement *element = (RetransmitBufferElement *) retransmit_buffer->data[i];
-        if (element->seq_num > seq_num_nack) {
-            frame.seq_num = element->seq_num;
-            frame.seq_num_ack = -1;  // XXX
-            frame.ack = -1; // XXX
+        if (element->tloe_frame.seq_num > seq_num_nack) {
+
+			frame = element->tloe_frame;
+			frame.mask = 1;		// Indicate to normal packet
+
+			printf("Retransmission with num_seq: %d\n", frame.seq_num);
             tloe_ether_send(ether, (char *)&frame, sizeof(TloeFrame));
             element->state = TLOE_RESENT;
         }
@@ -78,25 +80,31 @@ int slide_window(TloeEther *ether, int seq_num_ack) {
 
     // dequeue TLoE frames from the retransmit buffer
     e = (RetransmitBufferElement *) getfront(retransmit_buffer);
-    while (e != NULL && e->seq_num <= seq_num_ack) {
+    while (e != NULL && e->tloe_frame.seq_num <= seq_num_ack) {
         e = (RetransmitBufferElement *) dequeue(retransmit_buffer);
-        printf("RX: frame.seq_num_ack: %d, element->seq_num: %d\n", seq_num_ack, e->seq_num);
-        acked_seq = e->seq_num;
+//        printf("RX: frame.seq_num_ack: %d, element->seq_num: %d\n", seq_num_ack, e->tloe_frame.seq_num);
+        acked_seq = e->tloe_frame.seq_num;
         if (e) free(e);
         e = (RetransmitBufferElement *) getfront(retransmit_buffer);
     }
 }
 
-void TX() {
+TloeFrame *TX(TloeFrame * prev) {
+	TloeFrame *tloeframe;
+    if (!prev && is_queue_empty(message_buffer) && is_queue_empty(ack_buffer))
+        return NULL;
+	if (!prev) {
+		tloeframe = (TloeFrame *)dequeue(message_buffer);
+		if (!tloeframe) 
+			tloeframe = (TloeFrame *)dequeue(ack_buffer);
+	} else {
+		tloeframe = prev;
+	}
 
-    if (is_queue_empty(message_buffer))
-        return;
-
-    TloeFrame *tloeframe = (TloeFrame *)dequeue(message_buffer);
-    if (!tloeframe) {
-        printf("ERROR: %s: %d\n", __FILE__, __LINE__);
-        return;
-    }
+	if (!tloeframe) {
+		printf("ERROR: %s: %d\n", __FILE__, __LINE__);
+		return NULL;
+	}
 
     if (!is_queue_full(retransmit_buffer)) {
         // If the TileLink message is empty
@@ -106,8 +114,8 @@ void TX() {
             tloeframe->seq_num_ack = tloeframe->seq_num;
             tloeframe->seq_num = next_tx_seq;
 
-            printf("TX: Sending ACK/NAK with seq_num: %d, seq_num_ack: %d, ack: %d\n", 
-				tloeframe->seq_num, tloeframe->seq_num_ack, tloeframe->ack);
+//            printf("TX: Sending ACK/NAK with seq_num: %d, seq_num_ack: %d, ack: %d\n", 
+//				tloeframe->seq_num, tloeframe->seq_num_ack, tloeframe->ack);
 
             tloe_ether_send(ether, (char *)tloeframe, sizeof(TloeFrame));
 
@@ -118,63 +126,91 @@ void TX() {
             // Enqueue to retransmitBuffer
             RetransmitBufferElement *e = (RetransmitBufferElement *)malloc(sizeof(RetransmitBufferElement));
 
-            e->seq_num = next_tx_seq;
+            e->tloe_frame.seq_num = next_tx_seq;
             e->state = TLOE_INIT;
             e->send_time = time(NULL);
 
             if (!enqueue(retransmit_buffer, e)) {
                 free(e);
                 printf("ERROR: %s: %d\n", __FILE__, __LINE__);
-                exit(1);
-            }
+				exit(1);
+			}
 
             tloeframe->seq_num = next_tx_seq;
             tloeframe->seq_num_ack = acked_seq;
             tloeframe->ack = 1;
             tloeframe->mask = 1;
 
-            printf("TX: Sending TL msg with seq_num: %d, seq_num_ack: %d\n", tloeframe->seq_num, tloeframe->seq_num_ack);
-            tloe_ether_send(ether, (char *)tloeframe, sizeof(TloeFrame));
-
             // Update sequence number
             next_tx_seq = (next_tx_seq + 1) % (MAX_SEQ_NUM + 1);
-            //acked_seq = tloeframe->seq_num_ack;
+
+#if 0
+			// DEBUG: DROP packet
+			if (next_tx_seq == 5) {
+				printf("TX: DROPPED packet for seq_num: %d\n", next_tx_seq);
+				return ;
+			}
+#endif
+
+ //           printf("TX: Sending TL msg with seq_num: %d, seq_num_ack: %d\n", tloeframe->seq_num, tloeframe->seq_num_ack);
+            tloe_ether_send(ether, (char *)tloeframe, sizeof(TloeFrame));
+
             e->state = TLOE_SENT;
         }
     } else {
         printf("retransmit_buffer is full: %s: %d\n", __FILE__, __LINE__);
+		return tloeframe;
     }
+
+#if 0
+	e = getfront(retransmit_buffer);
+	if (!e) return;
+
+	if ((time(NULL)) - e->send_time >= TIMEOUT_SEC)
+		tx_retransmit(ether, e->seq_num);
+#endif
+
+	return NULL;
 }
+
+#if 0
+time_t last_ack_time = 0;
+#endif
 
 void RX() {
     int size;
-    TloeFrame tloeframe;
+    TloeFrame *tloeframe = (TloeFrame *)malloc(sizeof(TloeFrame));
+
+//	if ((time(NULL) - last_ack_time) >= ACK_TIMEOUT_SEC;
 
     // Receive a frame from the Ethernet layer
-    size = tloe_ether_recv(ether, (char *)&tloeframe);
+    size = tloe_ether_recv(ether, (char *)tloeframe);
     if (size == -1 && errno == EAGAIN) {
         // No data available, return without processing
         //printf("File: %s line: %d: tloe_ether_recv error\n", __FILE__, __LINE__);
         return;
     }
 
-    printf("RX: Received packet with seq_num: %d, seq_num_ack: %d, ack: %d\n", tloeframe.seq_num, tloeframe.seq_num_ack, tloeframe.ack);
+  //  printf("RX: Received packet with seq_num: %d, seq_num_ack: %d, ack: %d\n", tloeframe->seq_num, tloeframe->seq_num_ack, tloeframe->ack);
+
+	int diff_seq = next_rx_seq - tloeframe->seq_num;
+	if (diff_seq < 0)
+		diff_seq += MAX_SEQ_NUM + 1;
 
     // If the received frame has the expected sequence number
-    if (tloeframe.seq_num == next_rx_seq) {
-
-        if (is_ack_msg(&tloeframe)) {
+    if (diff_seq == 0) {
+        if (is_ack_msg(tloeframe)) {
             // ACK/NAK (zero-TileLink)
+             slide_window(ether, tloeframe->seq_num_ack);
+
             // Handle ACK/NAK and finish processing
-            if (tloeframe.ack == 0) {  // NACK
-                retransmit(ether, tloeframe.seq_num_ack);
-            } else if (tloeframe.ack == 1) {  // ACK
-                slide_window(ether, tloeframe.seq_num_ack);
+            if (tloeframe->ack == 0) {  // NACK
+                retransmit(ether, tloeframe->seq_num_ack);
             }
 
             // Update sequence numbers
-            next_rx_seq = (tloeframe.seq_num + 1) % (MAX_SEQ_NUM + 1);
-            acked_seq = tloeframe.seq_num_ack;
+            next_rx_seq = (tloeframe->seq_num + 1) % (MAX_SEQ_NUM + 1);
+            acked_seq = tloeframe->seq_num_ack;
 
             printf("Done! next_tx: %d, ackd: %d, next_rx: %d\n", next_tx_seq, acked_seq, next_rx_seq);
         } else {
@@ -182,52 +218,62 @@ void RX() {
             // Handle and enqueue it into the message buffer
             TloeFrame *frame = malloc(sizeof(TloeFrame));
 
-            frame->seq_num = tloeframe.seq_num;
-            frame->seq_num_ack = tloeframe.seq_num_ack;
-            frame->ack = tloeframe.ack;
+			*frame = *tloeframe;
             frame->mask = 0;				// To indicate ACK
 
             // Handle TileLink Msg
-			printf("RX: Send pakcet to Tx channel for replying ACK/NAK with seq_num: %d, seq_num_ack: %d, ack: %d\n", 
-				tloeframe.seq_num, tloeframe.seq_num_ack, tloeframe.ack);
+//			printf("RX: Send pakcet to Tx channel for replying ACK/NAK with seq_num: %d, seq_num_ack: %d, ack: %d\n", 
+//				tloeframe->seq_num, tloeframe->seq_num_ack, tloeframe->ack);
 
-            if (!enqueue(message_buffer, (void *) frame)) {
+            if (!enqueue(ack_buffer, (void *) frame)) {
                 printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
                 exit(1);
             }
 
             // Update sequence numbers
-            next_rx_seq = (tloeframe.seq_num + 1) % (MAX_SEQ_NUM+1);
-            acked_seq = tloeframe.seq_num_ack;
+            next_rx_seq = (tloeframe->seq_num + 1) % (MAX_SEQ_NUM+1);
+            acked_seq = tloeframe->seq_num_ack;
         }
-
-    } else if (((MAX_SEQ_NUM + 1) + next_rx_seq - tloeframe.seq_num) % (MAX_SEQ_NUM + 1) <= (MAX_SEQ_NUM) / 2) {
+	} else if (diff_seq < (MAX_SEQ_NUM + 1) / 2) {
         // The received TLoE frame is a duplicate
         // The frame should be dropped, NEXT_RX_SEQ is not updated
         // A positive acknowledgment is sent using the received sequence number
-        int seq_num = tloeframe.seq_num;
+        int seq_num = tloeframe->seq_num;
         printf("TLoE frame is a duplicate. seq_num: %d, next_rx_seq: %d\n", seq_num, next_rx_seq);
-        tloeframe.ack = 1;
-        tloeframe.seq_num_ack = seq_num;
 
-        // If the received frame contains data, enqueue it in the message buffer
-        if (tloe_get_mask(&tloeframe)) {
-            if (!enqueue(message_buffer, (void *) &tloeframe)) {
-                printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
-                exit(1);
-            }
-        }
-    } else {
+		// If the received frame contains data, enqueue it in the message buffer
+
+		if (is_ack_msg(tloeframe)) {
+			printf("File: %s line: %d: duplication error\n", __FILE__, __LINE__);
+			exit(1);
+		}
+
+		tloeframe->seq_num_ack = seq_num;
+		tloeframe->ack = 1;
+		tloeframe->mask = 0; // To indicate ACK
+
+		if (!enqueue(message_buffer, (void *) tloeframe)) {
+			printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
+			exit(1);
+		}
+	} else {
+
         // The received TLoE frame is out of sequence, indicating that some frames were lost
         // The frame should be dropped, NEXT_RX_SEQ is not updated
         // A negative acknowledgment (NACK) is sent using the last properly received sequence number
-        printf("TLoE frame is out of sequence\n");
-        tloeframe.seq_num_ack = next_rx_seq;
-        tloeframe.ack = 0;  // NACK
+		int last_proper_rx_seq = (next_rx_seq - 1) % (MAX_SEQ_NUM+1);
+		if (last_proper_rx_seq < 0)
+			last_proper_rx_seq += MAX_SEQ_NUM + 1;
+
+        printf("TLoE frame is out of sequence with seq_num: %d, next_rx_seq: %d\n", tloeframe->seq_num, next_rx_seq);
 
         // If the received frame contains data, enqueue it in the message buffer
-        if (tloe_get_mask(&tloeframe)) {
-            if (!enqueue(message_buffer, (void *) &tloeframe)) {
+		if (!is_ack_msg(tloeframe)) {
+			tloeframe->seq_num = last_proper_rx_seq;
+			tloeframe->ack = 0;  // NACK
+			tloeframe->mask = 0; // To indicate ACK
+
+			if (!enqueue(message_buffer, (void *) tloeframe)) {
                 printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
                 exit(1);
             }
@@ -236,12 +282,15 @@ void RX() {
 }
 
 void *tloe_endpoint(void *arg) {
+	TloeFrame *tloeframe;
 
 	while(is_done) {
-		TX();
+		tloeframe = TX(tloeframe);
 		RX();
+
+		if (!tloeframe) 
+			usleep(1000);
 	}
-	pthread_exit(NULL);
 }
 
 int main(int argc, char *argv[]) {
@@ -262,7 +311,8 @@ int main(int argc, char *argv[]) {
 
     retransmit_buffer = create_queue(WINDOW_SIZE + 1);
     rx_buffer = create_queue(10); // credits
-	message_buffer = create_queue(10);
+	message_buffer = create_queue(10000);
+	ack_buffer = create_queue(100);
 
 	if (pthread_create(&tloe_endpoint_thread, NULL, tloe_endpoint, NULL) != 0) {
         error_exit("Failed to ack reply thread");
@@ -288,7 +338,7 @@ int main(int argc, char *argv[]) {
 				free(new_tloe);
 			}
 		} else if (input == 'a') {
-			for (int i = 0; i < 10; i++) {
+			for (int i = 0; i < 1024; i++) {
 				TloeFrame *new_tloe = (TloeFrame *)malloc(sizeof(TloeFrame));
 				if (!new_tloe) {
 					printf("Memory allocation failed at packet %d!\n", i);
@@ -310,6 +360,8 @@ int main(int argc, char *argv[]) {
 			break;
 		}
 	}
+
+	is_done = 1;
 
     // Join threads
     pthread_join(tloe_endpoint_thread, NULL);
