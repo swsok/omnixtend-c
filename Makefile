@@ -1,11 +1,21 @@
-all:
-	gcc -g -o tloe_endpoint_stop_and_wait tloe_endpoint_stop_and_wait.c tloe_ether.c
-	gcc -g -o tloe_endpoint_stop_and_wait_slave tloe_endpoint_stop_and_wait_slave.c tloe_frame.c tloe_ether.c
-	gcc -g -o tloe_endpoint_sliding_window tloe_endpoint_sliding_window.c tloe_ether.c tloe_frame.c util/circular_queue.c 
-	gcc -g -o tloe_endpoint_sliding_window_slave tloe_endpoint_sliding_window_slave.c tloe_ether.c tloe_frame.c util/circular_queue.c 
+CC = gcc
+CFLAGS = -g
+SRC_DIR = . util
 
-rmmsgq:
-	rm /dev/mqueue/tloe_ether-a /dev/mqueue/tloe_ether-b
+SRC = $(wildcard $(addsuffix /*.c, $(SRC_DIR)))
+OBJ = $(patsubst %.c, %.o, $(SRC))
+TARGET = tloe_endpoint
+
+all: $(TARGET)
+
+$(TARGET): $(OBJ)
+	$(CC) $(CFLAGS) -o $@ $^
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -rf *.o tloe_endpoint_stop_and_wait tloe_endpoint_stop_and_wait_slave tloe_endpoint_sliding_window tloe_endpoint_sliding_window_slave
+	rm -f $(OBJ) $(TARGET)
+
+.PHONY: all clean
+
