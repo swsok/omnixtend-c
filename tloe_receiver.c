@@ -70,6 +70,9 @@ void RX(TloeEther *ether) {
             // Update sequence numbers
             next_rx_seq = (tloeframe->seq_num + 1) % (MAX_SEQ_NUM+1);
             acked_seq = tloeframe->seq_num_ack;
+
+	    // tloeframe must be freed here
+	    free(tloeframe);
         }
         //if (next_tx_seq % 100 == 0)
         //  fprintf(stderr, "next_tx: %d, ackd: %d, next_rx: %d, ack_cnt: %d\n", next_tx_seq, acked_seq, next_rx_seq, ack_cnt);

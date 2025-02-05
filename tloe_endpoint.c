@@ -36,17 +36,22 @@ time_t last_ack_time = 0;
 #endif
 
 void *tloe_endpoint(void *arg) {
-	TloeFrame *tloeframe = NULL;
-	TloeFrame *t = NULL;
+	TloeFrame *request_tloeframe = NULL;
+	TloeFrame *not_transmitted_frame = NULL;
 
 	while(is_done) {
-		if (tloeframe == NULL && !is_queue_empty(message_buffer)) 
-			tloeframe = t = dequeue(message_buffer);
-		tloeframe = TX(tloeframe, ether);
-		if (tloeframe == NULL && t != NULL) { 
-			free(t);
-			t = NULL;
+		if (!request_tloeframe && !is_queue_empty(message_buffer)) 
+			request_tloeframe = dequeue(message_buffer);
+
+		not_transmitted_frame = TX(request_tloeframe, ether);
+		if (not_transmitted_frame) {
+			request_tloeframe = not_transmitted_frame;
+			not_transmitted_frame = NULL;
+		} else if (!not_transmitted_frame  && request_tloeframe) { 
+			free(request_tloeframe);
+			request_tloeframe = NULL;
 		}
+
 		RX(ether);
 	}
 }
@@ -130,6 +135,12 @@ int main(int argc, char *argv[]) {
 
     // Cleanup
     tloe_ether_close(ether);
+
+    // Cleanup queues
+    delete_queue(message_buffer);
+    delete_queue(retransmit_buffer);
+    delete_queue(rx_buffer);
+    delete_queue(ack_buffer);
 
     return 0;
 }
