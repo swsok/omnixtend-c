@@ -1,7 +1,7 @@
 #ifndef __TLOE_FRAME_H__
 #define __TLOE_FRAME_H__
 
-#define TLOE_NACK       0
+#define TLOE_NAK        0
 #define TLOE_ACK        1
 
 typedef struct tloe_frame_struct {
@@ -12,7 +12,7 @@ typedef struct tloe_frame_struct {
     // TL messages 
 	
 	// Mask	
-	int mask;
+    int mask;
 } TloeFrame;
 
 typedef struct tloe_buffer_struct {

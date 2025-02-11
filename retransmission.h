@@ -13,7 +13,6 @@
 #define TLOE_RESENT     (1<<2)
 #define TLOE_ACKED      (1<<3)
 #define TLOE_TIMEOUT    (1<<4)
-#define TIMEOUT_SEC		2 // 타임아웃 시간 (초)
 #define WINDOW_SIZE     4
 
 typedef struct {

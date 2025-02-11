@@ -59,13 +59,15 @@ void *tloe_endpoint(void *arg) {
 int main(int argc, char *argv[]) {
     pthread_t tloe_endpoint_thread;
     int master_slave = 1;
-	char input;
+	char input, input_count[32];
+	int iter = 0;
 
     if (argc < 3) {
         printf("Usage: tloe_endpoint queue_name master[1]/slave[0]\n");
         exit(0);
     }
 
+    srand(time(NULL));
 
     if (argv[2][0] == '1')
         ether = tloe_ether_open(argv[1], 1);
@@ -82,26 +84,21 @@ int main(int argc, char *argv[]) {
     }
     
 	while(1) {
-		printf("Enter 's' to send a message, 'q' to quit:\n");
+		printf("Enter 's' to status, 'a' to send, 'q' to quit:\n");
 		printf("> ");
-		scanf(" %c", &input);
+		fgets(input_count, sizeof(input_count), stdin);
+
+		if (sscanf(input_count, " %c %d", &input, &iter) < 1) {
+			printf("Invalid input! Try again.\n");
+			continue;
+		}
 
 		if (input == 's') {
-			TloeFrame *new_tloe = (TloeFrame *)malloc(sizeof(TloeFrame));
-			if (!new_tloe) {
-				printf("Memory allocation failed!\n");
-				continue;
-			}
-			new_tloe->mask = 1;
-
-			if (enqueue(message_buffer, new_tloe)) {
-				printf("Message added to message_buffer\n");
-			} else {
-				printf("Failed to enqueue message, buffer is full.\n");
-				free(new_tloe);
-			}
+			printf("-----------------------------------------------------\n");
+			printf(" next_tx_seq: %d, acked_seq: %d, next_rx_seq: %d\n", next_tx_seq, acked_seq, next_rx_seq);
+			printf("-----------------------------------------------------\n");
 		} else if (input == 'a') {
-			for (int i = 0; i < 1000000000; i++) {
+			for (int i = 0; i < iter; i++) {
 				TloeFrame *new_tloe = (TloeFrame *)malloc(sizeof(TloeFrame));
 				if (!new_tloe) {
 					printf("Memory allocation failed at packet %d!\n", i);
@@ -115,7 +112,7 @@ int main(int argc, char *argv[]) {
 
 				if (enqueue(message_buffer, new_tloe)) {
 					if (i % 100 == 0)
-						printf("Packet %d added to message_buffer\n", i);
+						fprintf(stderr, "Packet %d added to message_buffer\n", i);
 				} else {
 					//printf("Failed to enqueue packet %d, buffer is full.\n", i);
 					free(new_tloe);
