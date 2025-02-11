@@ -2,7 +2,7 @@
 #define __TIMEOUT_H__
 #include <time.h>
 
-#define TIMEOUT_TX 1000   // RTT * 2 (unit:us)
+#define TIMEOUT_TX 10000   // RTT * 2 (unit:us)
 #define TIMEOUT_RX 100     // RTT * 2 (unit:us)
 
 typedef struct {

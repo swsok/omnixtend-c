@@ -38,7 +38,7 @@ TloeFrame *TX(TloeFrame *tloeframe, TloeEther *ether) {
 		e->tloe_frame = *tloeframe;
 		e->tloe_frame.seq_num = next_tx_seq;
 		e->state = TLOE_INIT;
-		e->send_time = time(NULL);
+		e->send_time = get_current_time();
 
 		if (!enqueue(retransmit_buffer, e)) {
 			free(e);
@@ -74,8 +74,10 @@ TloeFrame *TX(TloeFrame *tloeframe, TloeEther *ether) {
 	RetransmitBufferElement *e = getfront(retransmit_buffer);
     if (!e) return returnframe;
 
-    if (is_timeout_tx(e->send_time))
+    if (is_timeout_tx(e->send_time)) {
         retransmit(ether, retransmit_buffer, e->tloe_frame.seq_num - 1);
+		printf("TX: Timeout TX and retranmission from seq_num: %d\n", e->tloe_frame.seq_num);
+	}
 
     return returnframe;
 }

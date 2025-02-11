@@ -12,6 +12,10 @@ static int ack_cnt = 0;
 static int rx_count = 0;
 static TimeoutRX timeout_rx;
 
+extern int test_timeout;
+int test_timeout_tx = 10;
+int drop_ack = 0;
+
 void RX(TloeEther *ether) {
     int size;
     TloeFrame *tloeframe = (TloeFrame *)malloc(sizeof(TloeFrame));
@@ -24,6 +28,16 @@ void RX(TloeEther *ether) {
 	}
 
 	if (is_send_delayed_ack(&timeout_rx)) {
+#if 1  // (Test) Timeout TX: drop ack
+        if (!drop_ack && ((rand() % 100) == 1)) {
+			drop_ack = 1;	
+			test_timeout_tx = 10;
+		}
+		if (drop_ack && (test_timeout_tx > 0)) {
+			test_timeout_tx -= 1;
+			if (test_timeout_tx == 0) drop_ack = 0; 
+		} else {
+#endif
 		TloeFrame *frame = malloc(sizeof(TloeFrame));
 
 	    *frame = *tloeframe;
@@ -37,6 +51,9 @@ void RX(TloeEther *ether) {
 			exit(1);
 		}
 		timeout_rx.ack_pending = 0;
+#if 1
+		}
+#endif
 	}
 
     // Receive a frame from the Ethernet layer
@@ -47,6 +64,16 @@ void RX(TloeEther *ether) {
         free(tloeframe);
         return;
     }
+
+#if 1 // (Test) Timout TX: drop normal packet
+{
+	if (test_timeout-- > 0) {
+		printf("Drop packet of seq_num %d\n", tloeframe->seq_num);
+		free(tloeframe);
+		return;
+	}
+}
+#endif
 
 	// ACK/NAK (zero-TileLink)
     if (is_ack_msg(tloeframe)) {

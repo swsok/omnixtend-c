@@ -7,7 +7,7 @@ long get_current_time() {
 }
 
 int is_timeout_tx(time_t send_time) {
-	return difftime(time(NULL), send_time) >= TIMEOUT_TX;
+	return difftime(get_current_time(), send_time) >= TIMEOUT_TX;
 }
 
 void init_timeout_rx(TimeoutRX *rx) {
