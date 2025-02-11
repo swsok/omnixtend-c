@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include "tloe_transmitter.h"
 #include "tloe_endpoint.h"
+#include "timeout.h"
 
 TloeFrame *TX(TloeFrame *tloeframe, TloeEther *ether) {
 	TloeFrame *returnframe = NULL;
@@ -69,13 +70,12 @@ TloeFrame *TX(TloeFrame *tloeframe, TloeEther *ether) {
 		returnframe = tloeframe;
 	}
 
-#if 0 // timeout proto
-    e = getfront(retransmit_buffer);
-    if (!e) return;
+	// Timeout TX 
+	RetransmitBufferElement *e = getfront(retransmit_buffer);
+    if (!e) return returnframe;
 
-    if ((time(NULL)) - e->send_time >= TIMEOUT_SEC)
-        tx_retransmit(ether, e->seq_num);
-#endif
+    if (is_timeout_tx(e->send_time))
+        retransmit(ether, retransmit_buffer, e->tloe_frame.seq_num - 1);
 
     return returnframe;
 }

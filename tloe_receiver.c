@@ -6,17 +6,38 @@
 #include "tloe_endpoint.h"
 #include "tloe_common.h"
 #include "retransmission.h"
+#include "timeout.h"
 
 static int ack_cnt = 0;
 static int rx_count = 0;
+static TimeoutRX timeout_rx;
 
 void RX(TloeEther *ether) {
     int size;
     TloeFrame *tloeframe = (TloeFrame *)malloc(sizeof(TloeFrame));
 
-#if 0 // timeout proto
-    if ((time(NULL) - last_ack_time) >= ACK_TIMEOUT_SEC;
-#endif
+	// Timeout RX
+	static int initialized = 0;
+	if(!initialized) {
+		init_timeout_rx(&timeout_rx);
+		initialized = 1;
+	}
+
+	if (is_send_delayed_ack(&timeout_rx)) {
+		TloeFrame *frame = malloc(sizeof(TloeFrame));
+
+	    *frame = *tloeframe;
+		frame->seq_num = timeout_rx.last_ack_seq;
+		frame->seq_num_ack = timeout_rx.last_ack_seq;
+		frame->ack = TLOE_ACK;
+		frame->mask = 0;
+
+		if (!enqueue(ack_buffer, (void *) frame)) {
+			printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
+			exit(1);
+		}
+		timeout_rx.ack_pending = 0;
+	}
 
     // Receive a frame from the Ethernet layer
     size = tloe_ether_recv(ether, (char *)tloeframe);
@@ -42,10 +63,10 @@ void RX(TloeEther *ether) {
 
         free(tloeframe);
 
-        if (ack_cnt % 100 == 0) {
+//        if (ack_cnt % 100 == 0) {
             fprintf(stderr, "next_tx: %d, ackd: %d, next_rx: %d, ack_cnt: %d\n",
                 next_tx_seq, acked_seq, next_rx_seq, ack_cnt);
-        }
+//        }
         return;
     }
 
@@ -73,22 +94,34 @@ void RX(TloeEther *ether) {
 
     // Normal request packet
     // Handle and enqueue it into the message buffer
-    TloeFrame *frame = malloc(sizeof(TloeFrame));
-
-    *frame = *tloeframe;
-    frame->ack = TLOE_ACK;
-    frame->mask = 0;                // To indicate ACK
-	frame->seq_num_ack = frame->seq_num;
 
 	// Handle TileLink Msg
 	// TODO
 	//printf("RX: Send pakcet to Tx channel for replying ACK/NAK with seq_num: %d, seq_num_ack: %d, ack: %d\n",
 	//    tloeframe->seq_num, tloeframe->seq_num_ack, tloeframe->ack);
 
-	if (!enqueue(ack_buffer, (void *) frame)) {
-		printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
-		exit(1);
+	// Timeout RX
+	timeout_rx.last_ack_seq = tloeframe->seq_num;
+	timeout_rx.ack_pending = 1;
+	timeout_rx.last_ack_time = time(NULL);
+
+#if 0
+	if (is_send_delayed_ack(&timeout_rx)) {
+		TloeFrame *frame = malloc(sizeof(TloeFrame));
+
+	    *frame = *tloeframe;
+		frame->seq_num = timeout_rx.last_ack_seq;
+		frame->seq_num_ack = timeout_rx.last_ack_seq;
+		frame->ack = TLOE_ACK;
+		frame->mask = 0;
+
+		if (!enqueue(ack_buffer, (void *) frame)) {
+			printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
+			exit(1);
+		}
+		timeout_rx.ack_pending = 0;
 	}
+#endif
 
     // Update sequence numbers
    	next_rx_seq = (tloeframe->seq_num + 1) % (MAX_SEQ_NUM+1);
@@ -121,6 +154,7 @@ void RX(TloeEther *ether) {
             printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
             exit(1);
         }
+		init_timeout_rx(&timeout_rx);
     } else {
         // The received TLoE frame is out of sequence, indicating that some frames were lost
         // The frame should be dropped, NEXT_RX_SEQ is not updated
@@ -147,6 +181,7 @@ void RX(TloeEther *ether) {
 			printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
 			exit(1);
 		}
+		init_timeout_rx(&timeout_rx);
 	}
 }
 
