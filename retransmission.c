@@ -1,5 +1,6 @@
 #include "retransmission.h"
 #include "tloe_common.h"
+#include "timeout.h"
 
 int retransmit(TloeEther *ether, CircularQueue *retransmit_buffer, int seq_num) {
 	int i, n;
@@ -19,7 +20,7 @@ int retransmit(TloeEther *ether, CircularQueue *retransmit_buffer, int seq_num) 
 		tloe_ether_send(ether, (char *)&frame, sizeof(TloeFrame));
 
 		element->state = TLOE_RESENT;
-		element->send_time = time(NULL);
+		element->send_time = get_current_time();
 	}
 	return n;
 }

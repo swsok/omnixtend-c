@@ -30,6 +30,7 @@ int acked = 0;
 
 static TloeEther *ether;
 static int is_done = 1;
+int test_timeout = 0;  // for test timeout
 
 #if 0
 time_t last_ack_time = 0;
@@ -119,6 +120,9 @@ int main(int argc, char *argv[]) {
 					break;  // Stop if buffer is full
 				}
 			}
+		} else if (input == 'i') {
+			// Test timeout
+			test_timeout = iter;
 		} else if (input == 'q') {
 			printf("Exiting...\n");
 			break;
