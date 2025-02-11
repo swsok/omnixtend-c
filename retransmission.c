@@ -16,7 +16,8 @@ int retransmit(TloeEther *ether, CircularQueue *retransmit_buffer, int seq_num) 
 		frame.mask = 1;		// Indicate to normal packet
 
 		printf("Retransmission with num_seq: %d\n", frame.seq_num);
-		//			tloe_ether_send(ether, (char *)&frame, sizeof(TloeFrame));
+		tloe_ether_send(ether, (char *)&frame, sizeof(TloeFrame));
+
 		element->state = TLOE_RESENT;
 		element->send_time = time(NULL);
 	}

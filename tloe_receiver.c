@@ -63,10 +63,10 @@ void RX(TloeEther *ether) {
 
         free(tloeframe);
 
-//        if (ack_cnt % 100 == 0) {
+        if (ack_cnt % 100 == 0) {
             fprintf(stderr, "next_tx: %d, ackd: %d, next_rx: %d, ack_cnt: %d\n",
                 next_tx_seq, acked_seq, next_rx_seq, ack_cnt);
-//        }
+        }
         return;
     }
 
@@ -103,25 +103,7 @@ void RX(TloeEther *ether) {
 	// Timeout RX
 	timeout_rx.last_ack_seq = tloeframe->seq_num;
 	timeout_rx.ack_pending = 1;
-	timeout_rx.last_ack_time = time(NULL);
-
-#if 0
-	if (is_send_delayed_ack(&timeout_rx)) {
-		TloeFrame *frame = malloc(sizeof(TloeFrame));
-
-	    *frame = *tloeframe;
-		frame->seq_num = timeout_rx.last_ack_seq;
-		frame->seq_num_ack = timeout_rx.last_ack_seq;
-		frame->ack = TLOE_ACK;
-		frame->mask = 0;
-
-		if (!enqueue(ack_buffer, (void *) frame)) {
-			printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
-			exit(1);
-		}
-		timeout_rx.ack_pending = 0;
-	}
-#endif
+	timeout_rx.last_ack_time = get_current_time();
 
     // Update sequence numbers
    	next_rx_seq = (tloeframe->seq_num + 1) % (MAX_SEQ_NUM+1);
