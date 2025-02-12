@@ -62,7 +62,7 @@ void *tloe_endpoint(void *arg) {
 		if (!request_tloeframe && !is_queue_empty(e->message_buffer)) 
 			request_tloeframe = dequeue(e->message_buffer);
 
-		not_transmitted_frame = TX(request_tloeframe, e);
+		not_transmitted_frame = TX(e, request_tloeframe);
 		if (not_transmitted_frame) {
 			request_tloeframe = not_transmitted_frame;
 			not_transmitted_frame = NULL;

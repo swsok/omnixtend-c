@@ -1,6 +1,5 @@
 #ifndef __TLOE_COMMON_H__
 #define __TLOE_COMMON_H__
-#include <stdint.h>
 #include "tloe_endpoint.h"
 
 static inline int seq_num_diff(int seq1, int seq2) {
@@ -10,6 +9,13 @@ static inline int seq_num_diff(int seq1, int seq2) {
 
 	return diff;
 }
+
+#define BUG_ON(condition, message) do { \
+    if (condition) { \
+        fprintf(stderr, "BUG: %s:%d: %s\n", __FILE__, __LINE__, #message); \
+        exit(1); \
+    } \
+} while (0)
 
 #endif // __TLOE_COMMON_H__
 
