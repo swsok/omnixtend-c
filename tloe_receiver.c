@@ -129,8 +129,10 @@ void RX(TloeEther *ether) {
 
 	// Timeout RX
 	timeout_rx.last_ack_seq = tloeframe->seq_num;
-	timeout_rx.ack_pending = 1;
-	timeout_rx.last_ack_time = get_current_time();
+	if (timeout_rx.ack_pending == 0) {
+		timeout_rx.ack_pending = 1;
+		timeout_rx.last_ack_time = get_current_time();
+	}
 
     // Update sequence numbers
    	next_rx_seq = (tloeframe->seq_num + 1) % (MAX_SEQ_NUM+1);
@@ -156,14 +158,24 @@ void RX(TloeEther *ether) {
             free(tloeframe);
         }
 
-        tloeframe->seq_num_ack = seq_num;
-        tloeframe->ack = TLOE_ACK;
-        tloeframe->mask = 0; // To indicate ACK
-        if (!enqueue(ack_buffer, (void *) tloeframe)) {
-            printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
-            exit(1);
-        }
+#if 0
+		tloeframe->seq_num_ack = seq_num;
+		tloeframe->ack = TLOE_ACK;
+		tloeframe->mask = 0; // To indicate ACK
+		if (!enqueue(ack_buffer, (void *) tloeframe)) {
+			printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
+			exit(1);
+		}
 		init_timeout_rx(&timeout_rx);
+#else
+		if (timeout_rx.ack_pending == 0) {
+			timeout_rx.ack_pending = 1;
+			timeout_rx.last_ack_time = get_current_time();
+			timeout_rx.last_ack_seq = tloeframe->seq_num;
+		} else if(timeout_rx.last_ack_time < tloeframe.seq_num) {
+			timeout_rx.last_ack_seq = tloeframe->seq_num;
+		}
+#endif
     } else {
         // The received TLoE frame is out of sequence, indicating that some frames were lost
         // The frame should be dropped, NEXT_RX_SEQ is not updated
