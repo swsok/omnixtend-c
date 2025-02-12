@@ -18,4 +18,15 @@ static inline int tloe_seqnum_cmp(int a, int b) {
         return (-diff < HALF_MAX_SEQ_NUM) ? -1 : 1;
     }
 }
+
+static inline int tloe_seqnum_prev(int seq_num) {
+	int t = seq_num - 1;
+	if (t < 0) 
+		t = MAX_SEQ_NUM;
+	return t;
+}
+
+static inline int tloe_seqnum_next(int seq_num) {
+	return (seq_num + 1) & MAX_SEQ_NUM;
+}
 #endif // __TLOE_ENDPOINT_H__

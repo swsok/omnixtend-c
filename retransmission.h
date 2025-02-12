@@ -22,7 +22,6 @@ typedef struct {
 } RetransmitBufferElement;
 
 int retransmit(TloeEther *ether, CircularQueue *retransmit_buffer, int seq_num_nack);
-int slide_window(TloeEther *ether, CircularQueue *retransmit_buffer, int seq_num_ack);
-bool isTimeout(time_t send_time);
+void slide_window(TloeEther *ether, CircularQueue *retransmit_buffer, int seq_num_ack);
 
 #endif // __RETRANSISSION_H__

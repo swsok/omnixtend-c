@@ -7,6 +7,7 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include "tloe_endpoint.h"
 #include "tloe_ether.h"
 #include "tloe_frame.h"
 #include "tloe_transmitter.h"
@@ -16,8 +17,6 @@
 #include "util/circular_queue.h"
 #include "util/util.h"
 
-#define MAX_SEQ_NUM		((1<<10)-1)
-		      
 CircularQueue *retransmit_buffer;
 CircularQueue *rx_buffer;
 CircularQueue *message_buffer;
@@ -95,8 +94,15 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (input == 's') {
+			extern int ack_cnt;
+			extern int dup_cnt;
+			extern int oos_cnt;
+			extern int delay_cnt;
+			extern int drop_cnt;
+			
 			printf("-----------------------------------------------------\n");
-			printf(" next_tx_seq: %d, acked_seq: %d, next_rx_seq: %d\n", next_tx_seq, acked_seq, next_rx_seq);
+			printf(" next_tx_seq: %d, next_rx_seq: %d, ack_cnt: %d, dup: %d, oos: %d, delay: %d, drop: %d\n", 
+				next_tx_seq, next_rx_seq, ack_cnt, dup_cnt, oos_cnt, delay_cnt, drop_cnt);
 			printf("-----------------------------------------------------\n");
 		} else if (input == 'a') {
 			for (int i = 0; i < iter; i++) {

@@ -9,8 +9,8 @@ int retransmit(TloeEther *ether, CircularQueue *retransmit_buffer, int seq_num) 
 	n = 0;
 	for (i=retransmit_buffer->front; i != retransmit_buffer->rear; i = (i + 1) % retransmit_buffer->size) {
 		RetransmitBufferElement *element = (RetransmitBufferElement *) retransmit_buffer->data[i];
-		int diff = seq_num_diff(element->tloe_frame.seq_num, seq_num);
-		if (diff < ((MAX_SEQ_NUM + 1) / 2))
+		int diff = tloe_seqnum_cmp(element->tloe_frame.seq_num, seq_num);
+		if (diff < 0)
 			continue;
 
 		frame = element->tloe_frame;
@@ -25,22 +25,19 @@ int retransmit(TloeEther *ether, CircularQueue *retransmit_buffer, int seq_num) 
 	return n;
 }
 
-int slide_window(TloeEther *ether, CircularQueue *retransmit_buffer, int seq_num_ack) {
+void slide_window(TloeEther *ether, CircularQueue *retransmit_buffer, int last_seq_num) {
     RetransmitBufferElement *e;
-	int acked_seq = 0;
 
     // dequeue TLoE frames from the retransmit buffer
     e = (RetransmitBufferElement *) getfront(retransmit_buffer);
     while (e != NULL) {
-	    int diff = seq_num_diff(e->tloe_frame.seq_num, seq_num_ack);
-	    if (diff >= ((MAX_SEQ_NUM + 1) / 2))
+		int diff = tloe_seqnum_cmp(e->tloe_frame.seq_num, last_seq_num);
+	    if (diff > 0)
 		    break;
 
         e = (RetransmitBufferElement *) dequeue(retransmit_buffer);
-		//printf("RX: frame.seq_num_ack: %d, element->seq_num: %d\n", seq_num_ack, e->tloe_frame.seq_num);
-        acked_seq = e->tloe_frame.seq_num;
+		//printf("RX: frame.last_seq_num: %d, element->seq_num: %d\n", last_seq_num, e->tloe_frame.seq_num);
         if (e) free(e);
         e = (RetransmitBufferElement *) getfront(retransmit_buffer);
     }
-	return acked_seq;
 }

@@ -8,7 +8,11 @@
 #include "retransmission.h"
 #include "timeout.h"
 
-static int ack_cnt = 0;
+int ack_cnt = 0;
+int dup_cnt = 0;
+int oos_cnt = 0;
+int delay_cnt = 0;
+int drop_cnt = 0;
 static int rx_count = 0;
 static TimeoutRX timeout_rx;
 
@@ -28,7 +32,7 @@ void RX(TloeEther *ether) {
 	}
 
 	if (is_send_delayed_ack(&timeout_rx)) {
-#if 1  // (Test) Timeout TX: drop ack
+#if 0  // (Test) Timeout TX: drop ack
         if (!drop_ack && ((rand() % 100) == 1)) {
 			drop_ack = 1;	
 			test_timeout_tx = 10;
@@ -51,7 +55,9 @@ void RX(TloeEther *ether) {
 			exit(1);
 		}
 		timeout_rx.ack_pending = 0;
-#if 1
+		timeout_rx.ack_cnt = 0;
+		delay_cnt--;
+#if 0
 		}
 #endif
 	}
@@ -65,7 +71,7 @@ void RX(TloeEther *ether) {
         return;
     }
 
-#if 1 // (Test) Timout TX: drop normal packet
+#if 0 // (Test) Timout TX: drop normal packet
 {
 	if (test_timeout-- > 0) {
 		printf("Drop packet of seq_num %d\n", tloeframe->seq_num);
@@ -81,7 +87,7 @@ void RX(TloeEther *ether) {
 
         // Handle ACK/NAK and finish processing
         if (tloeframe->ack == TLOE_NAK)  // NAK
-            retransmit(ether, retransmit_buffer, tloeframe->seq_num_ack);
+            retransmit(ether, retransmit_buffer, tloe_seqnum_next(tloeframe->seq_num_ack));
 
         // Update sequence numbers
         // Note that next_rx_seq must not be increased
@@ -100,7 +106,7 @@ void RX(TloeEther *ether) {
     //printf("RX: Received packet with seq_num: %d, seq_num_ack: %d, ack: %d\n", 
     //    tloeframe->seq_num, tloeframe->seq_num_ack, tloeframe->ack);
 
-    int diff_seq = seq_num_diff(tloeframe->seq_num, next_rx_seq);
+    int diff_seq = tloe_seqnum_cmp(tloeframe->seq_num, next_rx_seq);
 
     // If the received frame has the expected sequence number
     if (diff_seq == 0) {
@@ -111,8 +117,8 @@ void RX(TloeEther *ether) {
 
 #if 1 // test: Packet drop
     if (1) {
-        extern int master_slave;
         if ((rand() % 10000) == 99) {
+			drop_cnt++;
             free(tloeframe);
             return;
         }
@@ -132,7 +138,9 @@ void RX(TloeEther *ether) {
 	if (timeout_rx.ack_pending == 0) {
 		timeout_rx.ack_pending = 1;
 		timeout_rx.last_ack_time = get_current_time();
-	}
+	} 
+	timeout_rx.ack_cnt++;
+	delay_cnt++;
 
     // Update sequence numbers
    	next_rx_seq = (tloeframe->seq_num + 1) % (MAX_SEQ_NUM+1);
@@ -144,7 +152,7 @@ void RX(TloeEther *ether) {
     //if (next_tx_seq % 100 == 0)
     //fprintf(stderr, "next_tx: %d, ackd: %d, next_rx: %d, ack_cnt: %d\n", 
     //    next_tx_seq, acked_seq, next_rx_seq, ack_cnt);
-    } else if (diff_seq < (MAX_SEQ_NUM + 1) / 2) {
+    } else if (diff_seq < 0) {
         // The received TLoE frame is a duplicate
         // The frame should be dropped, NEXT_RX_SEQ is not updated
         // A positive acknowledgment is sent using the received sequence number
@@ -157,6 +165,7 @@ void RX(TloeEther *ether) {
             exit(1);
             free(tloeframe);
         }
+		dup_cnt++;
 
 #if 0
 		tloeframe->seq_num_ack = seq_num;
@@ -172,9 +181,11 @@ void RX(TloeEther *ether) {
 			timeout_rx.ack_pending = 1;
 			timeout_rx.last_ack_time = get_current_time();
 			timeout_rx.last_ack_seq = tloeframe->seq_num;
-		} else if(timeout_rx.last_ack_time < tloeframe.seq_num) {
+		} else if(tloe_seqnum_cmp(tloeframe->seq_num, timeout_rx.last_ack_seq) > 0) {
 			timeout_rx.last_ack_seq = tloeframe->seq_num;
-		}
+		} 
+		timeout_rx.ack_cnt++;
+		delay_cnt++;
 #endif
     } else {
         // The received TLoE frame is out of sequence, indicating that some frames were lost
@@ -195,6 +206,7 @@ void RX(TloeEther *ether) {
 			free(tloeframe);
 		}
 
+		oos_cnt++;
 		tloeframe->seq_num_ack = last_proper_rx_seq;
 		tloeframe->ack = TLOE_NAK;  // NAK
 		tloeframe->mask = 0; // To indicate ACK
@@ -202,6 +214,7 @@ void RX(TloeEther *ether) {
 			printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
 			exit(1);
 		}
+		
 		init_timeout_rx(&timeout_rx);
 	}
 }

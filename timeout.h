@@ -2,13 +2,14 @@
 #define __TIMEOUT_H__
 #include <time.h>
 
-#define TIMEOUT_TX 10000   // RTT * 2 (unit:us)
+#define TIMEOUT_TX 100000   // RTT * 2 (unit:us)
 #define TIMEOUT_RX 100     // RTT * 2 (unit:us)
 
 typedef struct {
 	long last_ack_time;
     int last_ack_seq;
     int ack_pending;
+	int ack_cnt;
 } TimeoutRX;
 
 long get_current_time();
