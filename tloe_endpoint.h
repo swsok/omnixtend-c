@@ -2,6 +2,7 @@
 #define __TLOE_ENDPOINT_H__
 #include "timeout.h"
 #include "tloe_ether.h"
+#include "tloe_frame.h"
 #include "util/circular_queue.h"
 
 #define MAX_SEQ_NUM     ((1<<10)-1)
@@ -33,6 +34,12 @@ typedef struct tloe_endpoint_struct {
 	int drop_cnt;
 } tloe_endpoint_t;
 
+typedef enum {
+	REQ_NORMAL = 0,
+	REQ_DUPLICATE,
+	REQ_OOS,
+} tloe_rx_req_type_t;
+
 static inline int tloe_seqnum_cmp(int a, int b) {
     int diff = a - b;  // 두 값의 차이 계산
 
@@ -57,5 +64,14 @@ static inline int tloe_seqnum_prev(int seq_num) {
 
 static inline int tloe_seqnum_next(int seq_num) {
 	return (seq_num + 1) & MAX_SEQ_NUM;
+}
+
+static inline tloe_rx_req_type_t tloe_rx_get_req_type(tloe_endpoint_t *e, TloeFrame *f) {
+	int diff_seq = tloe_seqnum_cmp(f->seq_num, e->next_rx_seq);
+	if (diff_seq == 0)
+		return REQ_NORMAL;
+	else if (diff_seq < 0)
+		return REQ_DUPLICATE;
+	return REQ_OOS;
 }
 #endif // __TLOE_ENDPOINT_H__
