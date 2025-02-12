@@ -8,67 +8,20 @@
 #include "retransmission.h"
 #include "timeout.h"
 
-int ack_cnt = 0;
-int dup_cnt = 0;
-int oos_cnt = 0;
-int delay_cnt = 0;
-int drop_cnt = 0;
-static int rx_count = 0;
-static TimeoutRX timeout_rx;
-
 extern int test_timeout;
 int test_timeout_tx = 10;
 int drop_ack = 0;
 
-void RX(TloeEther *ether) {
+void RX(tloe_endpoint_t *e) {
     int size;
+	TloeEther *ether = e->ether;
     TloeFrame *tloeframe = (TloeFrame *)malloc(sizeof(TloeFrame));
-
-	// Timeout RX
-	static int initialized = 0;
-	if(!initialized) {
-		init_timeout_rx(&timeout_rx);
-		initialized = 1;
-	}
-
-	if (is_send_delayed_ack(&timeout_rx)) {
-#if 0  // (Test) Timeout TX: drop ack
-        if (!drop_ack && ((rand() % 100) == 1)) {
-			drop_ack = 1;	
-			test_timeout_tx = 10;
-		}
-		if (drop_ack && (test_timeout_tx > 0)) {
-			test_timeout_tx -= 1;
-			if (test_timeout_tx == 0) drop_ack = 0; 
-		} else {
-#endif
-		TloeFrame *frame = malloc(sizeof(TloeFrame));
-
-	    *frame = *tloeframe;
-		frame->seq_num = timeout_rx.last_ack_seq;
-		frame->seq_num_ack = timeout_rx.last_ack_seq;
-		frame->ack = TLOE_ACK;
-		frame->mask = 0;
-
-		if (!enqueue(ack_buffer, (void *) frame)) {
-			printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
-			exit(1);
-		}
-		timeout_rx.ack_pending = 0;
-		timeout_rx.ack_cnt = 0;
-		delay_cnt--;
-#if 0
-		}
-#endif
-	}
 
     // Receive a frame from the Ethernet layer
     size = tloe_ether_recv(ether, (char *)tloeframe);
-    if (size == -1 && errno == EAGAIN) {
-        // No data available, return without processing
-        //printf("File: %s line: %d: tloe_ether_recv error\n", __FILE__, __LINE__);
+    if (size == 0) {
         free(tloeframe);
-        return;
+		goto process_ack;
     }
 
 #if 0 // (Test) Timout TX: drop normal packet
@@ -83,30 +36,30 @@ void RX(TloeEther *ether) {
 
 	// ACK/NAK (zero-TileLink)
     if (is_ack_msg(tloeframe)) {
-        slide_window(ether, retransmit_buffer, tloeframe->seq_num_ack);
+        slide_window(e, tloeframe->seq_num_ack);
 
         // Handle ACK/NAK and finish processing
         if (tloeframe->ack == TLOE_NAK)  // NAK
-            retransmit(ether, retransmit_buffer, tloe_seqnum_next(tloeframe->seq_num_ack));
+            retransmit(e, tloe_seqnum_next(tloeframe->seq_num_ack));
 
         // Update sequence numbers
         // Note that next_rx_seq must not be increased
-	    acked_seq = tloeframe->seq_num_ack;
-	    ack_cnt++;
+	    e->acked_seq = tloeframe->seq_num_ack;
+	    e->ack_cnt++;
 
         free(tloeframe);
 
-        if (ack_cnt % 100 == 0) {
+        if (e->ack_cnt % 100 == 0) {
             fprintf(stderr, "next_tx: %d, ackd: %d, next_rx: %d, ack_cnt: %d\n",
-                next_tx_seq, acked_seq, next_rx_seq, ack_cnt);
+                e->next_tx_seq, e->acked_seq, e->next_rx_seq, e->ack_cnt);
         }
-        return;
+		goto process_ack;
     }
 
     //printf("RX: Received packet with seq_num: %d, seq_num_ack: %d, ack: %d\n", 
     //    tloeframe->seq_num, tloeframe->seq_num_ack, tloeframe->ack);
 
-    int diff_seq = tloe_seqnum_cmp(tloeframe->seq_num, next_rx_seq);
+    int diff_seq = tloe_seqnum_cmp(tloeframe->seq_num, e->next_rx_seq);
 
     // If the received frame has the expected sequence number
     if (diff_seq == 0) {
@@ -118,9 +71,9 @@ void RX(TloeEther *ether) {
 #if 1 // test: Packet drop
     if (1) {
         if ((rand() % 10000) == 99) {
-			drop_cnt++;
+			e->drop_cnt++;
             free(tloeframe);
-            return;
+			goto process_ack;
         }
     }
 #endif
@@ -134,17 +87,17 @@ void RX(TloeEther *ether) {
 	//    tloeframe->seq_num, tloeframe->seq_num_ack, tloeframe->ack);
 
 	// Timeout RX
-	timeout_rx.last_ack_seq = tloeframe->seq_num;
-	if (timeout_rx.ack_pending == 0) {
-		timeout_rx.ack_pending = 1;
-		timeout_rx.last_ack_time = get_current_time();
+	e->timeout_rx.last_ack_seq = tloeframe->seq_num;
+	if (e->timeout_rx.ack_pending == 0) {
+		e->timeout_rx.ack_pending = 1;
+		e->timeout_rx.last_ack_time = get_current_time();
 	} 
-	timeout_rx.ack_cnt++;
-	delay_cnt++;
+	e->timeout_rx.ack_cnt++;
+	e->delay_cnt++;
 
     // Update sequence numbers
-   	next_rx_seq = (tloeframe->seq_num + 1) % (MAX_SEQ_NUM+1);
-    acked_seq = tloeframe->seq_num_ack;
+   	e->next_rx_seq = tloe_seqnum_next(tloeframe->seq_num);
+    e->acked_seq = tloeframe->seq_num_ack;
 
     // tloeframe must be freed here
     free(tloeframe);
@@ -157,7 +110,7 @@ void RX(TloeEther *ether) {
         // The frame should be dropped, NEXT_RX_SEQ is not updated
         // A positive acknowledgment is sent using the received sequence number
         int seq_num = tloeframe->seq_num;
-        printf("TLoE frame is a duplicate. seq_num: %d, next_rx_seq: %d\n", seq_num, next_rx_seq);
+        printf("TLoE frame is a duplicate. seq_num: %d, next_rx_seq: %d\n", seq_num, e->next_rx_seq);
 
         // If the received frame contains data, enqueue it in the message buffer
         if (is_ack_msg(tloeframe)) {
@@ -165,39 +118,26 @@ void RX(TloeEther *ether) {
             exit(1);
             free(tloeframe);
         }
-		dup_cnt++;
+		e->dup_cnt++;
 
-#if 0
-		tloeframe->seq_num_ack = seq_num;
-		tloeframe->ack = TLOE_ACK;
-		tloeframe->mask = 0; // To indicate ACK
-		if (!enqueue(ack_buffer, (void *) tloeframe)) {
-			printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
-			exit(1);
-		}
-		init_timeout_rx(&timeout_rx);
-#else
-		if (timeout_rx.ack_pending == 0) {
-			timeout_rx.ack_pending = 1;
-			timeout_rx.last_ack_time = get_current_time();
-			timeout_rx.last_ack_seq = tloeframe->seq_num;
-		} else if(tloe_seqnum_cmp(tloeframe->seq_num, timeout_rx.last_ack_seq) > 0) {
-			timeout_rx.last_ack_seq = tloeframe->seq_num;
+		if (e->timeout_rx.ack_pending == 0) {
+			e->timeout_rx.ack_pending = 1;
+			e->timeout_rx.last_ack_time = get_current_time();
+			e->timeout_rx.last_ack_seq = tloeframe->seq_num;
+		} else if(tloe_seqnum_cmp(tloeframe->seq_num, e->timeout_rx.last_ack_seq) > 0) {
+			e->timeout_rx.last_ack_seq = tloeframe->seq_num;
 		} 
-		timeout_rx.ack_cnt++;
-		delay_cnt++;
-#endif
+		e->timeout_rx.ack_cnt++;
+		e->delay_cnt++;
     } else {
         // The received TLoE frame is out of sequence, indicating that some frames were lost
         // The frame should be dropped, NEXT_RX_SEQ is not updated
         // A negative acknowledgment (NACK) is sent using the last properly received sequence number
-        int last_proper_rx_seq = (next_rx_seq - 1) % (MAX_SEQ_NUM+1);
-        if (last_proper_rx_seq < 0)
-            last_proper_rx_seq += MAX_SEQ_NUM + 1;
+        int last_proper_rx_seq = tloe_seqnum_prev(e->next_rx_seq);
 
         printf("TLoE frame is out of sequence with ");
 		printf("seq_num: %d, next_rx_seq: %d last: %d\n",
-			tloeframe->seq_num, next_rx_seq, last_proper_rx_seq);
+			tloeframe->seq_num, e->next_rx_seq, last_proper_rx_seq);
 
         // If the received frame contains data, enqueue it in the message buffer
 		if (is_ack_msg(tloeframe)) {
@@ -206,16 +146,50 @@ void RX(TloeEther *ether) {
 			free(tloeframe);
 		}
 
-		oos_cnt++;
+		e->oos_cnt++;
 		tloeframe->seq_num_ack = last_proper_rx_seq;
 		tloeframe->ack = TLOE_NAK;  // NAK
 		tloeframe->mask = 0; // To indicate ACK
-		if (!enqueue(ack_buffer, (void *) tloeframe)) {
+		if (!enqueue(e->ack_buffer, (void *) tloeframe)) {
 			printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
 			exit(1);
 		}
 		
-		init_timeout_rx(&timeout_rx);
+		init_timeout_rx(&(e->timeout_rx));
 	}
+
+process_ack:
+	// Timeout RX
+	if (is_send_delayed_ack(&(e->timeout_rx))) {
+#if 0  // (Test) Timeout TX: drop ack
+        if (!drop_ack && ((rand() % 100) == 1)) {
+			drop_ack = 1;	
+			test_timeout_tx = 10;
+		}
+		if (drop_ack && (test_timeout_tx > 0)) {
+			test_timeout_tx -= 1;
+			if (test_timeout_tx == 0) drop_ack = 0; 
+		} else {
+#endif
+		TloeFrame *frame = malloc(sizeof(TloeFrame));
+
+	    *frame = *tloeframe;
+		frame->seq_num = e->timeout_rx.last_ack_seq;
+		frame->seq_num_ack = e->timeout_rx.last_ack_seq;
+		frame->ack = TLOE_ACK;
+		frame->mask = 0;
+
+		if (!enqueue(e->ack_buffer, (void *) frame)) {
+			printf("File: %s line: %d: enqueue error\n", __FILE__, __LINE__);
+			exit(1);
+		}
+		e->timeout_rx.ack_pending = 0;
+		e->timeout_rx.ack_cnt = 0;
+		e->delay_cnt--;
+#if 0
+		}
+#endif
+	}
+
 }
 

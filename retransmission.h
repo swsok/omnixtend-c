@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <time.h>
+#include "tloe_endpoint.h"
 #include "tloe_frame.h"
 #include "tloe_ether.h"
 #include "util/circular_queue.h"
@@ -21,7 +22,7 @@ typedef struct {
     TloeFrame tloe_frame;
 } RetransmitBufferElement;
 
-int retransmit(TloeEther *ether, CircularQueue *retransmit_buffer, int seq_num_nack);
-void slide_window(TloeEther *ether, CircularQueue *retransmit_buffer, int seq_num_ack);
+int retransmit(tloe_endpoint_t *, int);
+void slide_window(tloe_endpoint_t *, int);
 
 #endif // __RETRANSISSION_H__

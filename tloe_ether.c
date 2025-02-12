@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 #include "tloe_ether.h"
 
 size_t tloe_ether_send(TloeEther *eth, char *data, size_t size) {
@@ -15,9 +16,10 @@ size_t tloe_ether_recv(TloeEther *eth, char *data) {
     int ret;
 
     ret = mq_receive(eth->mq_rx, data, TLOE_ETHER_MSG_SIZE, NULL);
+    if (ret == -1 && errno == EAGAIN) 
+		return 0;
 
     return ret;
-
 }
 
 TloeEther *tloe_ether_alloc_and_init(void){

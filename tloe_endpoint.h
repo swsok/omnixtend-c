@@ -1,8 +1,37 @@
 #ifndef __TLOE_ENDPOINT_H__
 #define __TLOE_ENDPOINT_H__
+#include "timeout.h"
+#include "tloe_ether.h"
+#include "util/circular_queue.h"
 
 #define MAX_SEQ_NUM     ((1<<10)-1)
 #define HALF_MAX_SEQ_NUM ((MAX_SEQ_NUM + 1)/2)
+
+typedef struct tloe_endpoint_struct {
+	TloeEther *ether;
+	CircularQueue *retransmit_buffer;
+	CircularQueue *rx_buffer;
+	CircularQueue *message_buffer;
+	CircularQueue *ack_buffer;
+
+	TimeoutRX timeout_rx;
+
+    pthread_t tloe_endpoint_thread;
+
+	int is_done;
+	int master;
+
+	int next_tx_seq;
+	int next_rx_seq;
+	int acked_seq;
+	int acked;
+
+	int ack_cnt;
+	int dup_cnt;
+	int oos_cnt;
+	int delay_cnt;
+	int drop_cnt;
+} tloe_endpoint_t;
 
 static inline int tloe_seqnum_cmp(int a, int b) {
     int diff = a - b;  // 두 값의 차이 계산

@@ -14,36 +14,55 @@
 #include "tloe_receiver.h"
 #include "tilelink_msg.h"
 #include "retransmission.h"
+#include "timeout.h"
 #include "util/circular_queue.h"
 #include "util/util.h"
 
-CircularQueue *retransmit_buffer;
-CircularQueue *rx_buffer;
-CircularQueue *message_buffer;
-CircularQueue *ack_buffer;
-
-int next_tx_seq = 0;
-int next_rx_seq = 0;
-int acked_seq = MAX_SEQ_NUM;
-int acked = 0;
-
-static TloeEther *ether;
-static int is_done = 1;
 int test_timeout = 0;  // for test timeout
 
-#if 0
-time_t last_ack_time = 0;
-#endif
+void init_tloe_endpoint(tloe_endpoint_t *e, TloeEther *ether) {
+	e->is_done = 0;
+
+	e->next_tx_seq = 0;
+	e->next_rx_seq = 0;
+	e->acked_seq = MAX_SEQ_NUM;
+	e->acked = 0;
+
+    e->retransmit_buffer = create_queue(WINDOW_SIZE + 1);
+    e->rx_buffer = create_queue(10); // credits
+	e->message_buffer = create_queue(10000);
+	e->ack_buffer = create_queue(100);
+
+	e->ether = ether;
+
+	init_timeout_rx(&(e->timeout_rx));
+}
+
+void close_tloe_endpoint(tloe_endpoint_t *e) {
+    // Join threads
+    pthread_join(e->tloe_endpoint_thread, NULL);
+
+    // Cleanup
+    tloe_ether_close(e->ether);
+
+    // Cleanup queues
+    delete_queue(e->message_buffer);
+    delete_queue(e->retransmit_buffer);
+    delete_queue(e->rx_buffer);
+    delete_queue(e->ack_buffer);
+}
 
 void *tloe_endpoint(void *arg) {
+	tloe_endpoint_t *e = (tloe_endpoint_t *)arg;
+
 	TloeFrame *request_tloeframe = NULL;
 	TloeFrame *not_transmitted_frame = NULL;
 
-	while(is_done) {
-		if (!request_tloeframe && !is_queue_empty(message_buffer)) 
-			request_tloeframe = dequeue(message_buffer);
+	while(!e->is_done) {
+		if (!request_tloeframe && !is_queue_empty(e->message_buffer)) 
+			request_tloeframe = dequeue(e->message_buffer);
 
-		not_transmitted_frame = TX(request_tloeframe, ether);
+		not_transmitted_frame = TX(request_tloeframe, e);
 		if (not_transmitted_frame) {
 			request_tloeframe = not_transmitted_frame;
 			not_transmitted_frame = NULL;
@@ -52,13 +71,13 @@ void *tloe_endpoint(void *arg) {
 			request_tloeframe = NULL;
 		}
 
-		RX(ether);
+		RX(e);
 	}
 }
 
 int main(int argc, char *argv[]) {
-    pthread_t tloe_endpoint_thread;
-    int master_slave = 1;
+	tloe_endpoint_t *e;
+	TloeEther *ether;
 	char input, input_count[32];
 	int iter = 0;
 
@@ -74,16 +93,15 @@ int main(int argc, char *argv[]) {
     else
         ether = tloe_ether_open(argv[1], 0);
 
-    retransmit_buffer = create_queue(WINDOW_SIZE + 1);
-    rx_buffer = create_queue(10); // credits
-	message_buffer = create_queue(10000);
-	ack_buffer = create_queue(100);
+	e = (tloe_endpoint_t *)malloc(sizeof(tloe_endpoint_t));
 
-	if (pthread_create(&tloe_endpoint_thread, NULL, tloe_endpoint, NULL) != 0) {
-        error_exit("Failed to ack reply thread");
+	init_tloe_endpoint(e, ether);
+
+	if (pthread_create(&(e->tloe_endpoint_thread), NULL, tloe_endpoint, e) != 0) {
+        error_exit("Failed to create tloe endpoint thread");
     }
     
-	while(1) {
+	while(!(e->is_done)) {
 		printf("Enter 's' to status, 'a' to send, 'q' to quit:\n");
 		printf("> ");
 		fgets(input_count, sizeof(input_count), stdin);
@@ -94,15 +112,10 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (input == 's') {
-			extern int ack_cnt;
-			extern int dup_cnt;
-			extern int oos_cnt;
-			extern int delay_cnt;
-			extern int drop_cnt;
-			
 			printf("-----------------------------------------------------\n");
 			printf(" next_tx_seq: %d, next_rx_seq: %d, ack_cnt: %d, dup: %d, oos: %d, delay: %d, drop: %d\n", 
-				next_tx_seq, next_rx_seq, ack_cnt, dup_cnt, oos_cnt, delay_cnt, drop_cnt);
+				e->next_tx_seq, e->next_rx_seq, e->ack_cnt, 
+				e->dup_cnt, e->oos_cnt, e->delay_cnt, e->drop_cnt);
 			printf("-----------------------------------------------------\n");
 		} else if (input == 'a') {
 			for (int i = 0; i < iter; i++) {
@@ -114,10 +127,10 @@ int main(int argc, char *argv[]) {
 
 				new_tloe->mask = 1;  // Set mask (1 = normal packet)
 
-				while(is_queue_full(message_buffer)) 
+				while(is_queue_full(e->message_buffer)) 
 					usleep(1000);
 
-				if (enqueue(message_buffer, new_tloe)) {
+				if (enqueue(e->message_buffer, new_tloe)) {
 					if (i % 100 == 0)
 						fprintf(stderr, "Packet %d added to message_buffer\n", i);
 				} else {
@@ -130,25 +143,15 @@ int main(int argc, char *argv[]) {
 			// Test timeout
 			test_timeout = iter;
 		} else if (input == 'q') {
+			e->is_done = 1;
 			printf("Exiting...\n");
 			break;
 		}
 	}
 
-	is_done = 1;
+	close_tloe_endpoint(e);
 
-    // Join threads
-    pthread_join(tloe_endpoint_thread, NULL);
 
-    // Cleanup
-    tloe_ether_close(ether);
-
-    // Cleanup queues
-    delete_queue(message_buffer);
-    delete_queue(retransmit_buffer);
-    delete_queue(rx_buffer);
-    delete_queue(ack_buffer);
-
-    return 0;
+   return 0;
 }
 
