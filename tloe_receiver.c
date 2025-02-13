@@ -52,7 +52,9 @@ static void serve_normal_request(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) 
 
 static void serve_duplicate_request(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) {
 	int seq_num = recv_tloeframe->seq_num;
-	printf("TLoE frame is a duplicate. seq_num: %d, next_rx_seq: %d\n", seq_num, e->next_rx_seq);
+	fprintf(stderr, "TLoE frame is a duplicate. "
+			"seq_num: %d, next_rx_seq: %d\n",
+			seq_num, e->next_rx_seq);
 
 	// If the received frame contains data, enqueue it in the message buffer
 	BUG_ON(is_ack_msg(recv_tloeframe), "received frame must not be an ack frame.");
@@ -78,8 +80,8 @@ static void serve_oos_request(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) {
 	// A negative acknowledgment (NACK) is sent using the last properly received sequence number
 	int last_proper_rx_seq = tloe_seqnum_prev(e->next_rx_seq);
 
-	printf("TLoE frame is out of sequence with ");
-	printf("seq_num: %d, next_rx_seq: %d last: %d\n",
+	fprintf(stderr, "TLoE frame is out of sequence with "
+			"seq_num: %d, next_rx_seq: %d last: %d\n",
 			recv_tloeframe->seq_num, e->next_rx_seq, last_proper_rx_seq);
 
 	// If the received frame contains data, enqueue it in the message buffer
@@ -138,7 +140,7 @@ void RX(tloe_endpoint_t *e) {
 		goto process_ack;
 	}
 
-#if 0 // (Test) Delayed ACK: Drop a certain number of normal packets
+#ifdef TEST_NORMAL_FRAME_DROP // (Test) Delayed ACK: Drop a certain number of normal packets
 	if (e->master == 0) {  // in case of slave
 		static int dack;
 		if (dack == 0) {

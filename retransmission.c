@@ -18,7 +18,7 @@ int retransmit(tloe_endpoint_t *e, int seq_num) {
 		frame = element->tloe_frame;
 		frame.mask = 1;		// Indicate to normal packet
 
-		printf("Retransmission with num_seq: %d\n", frame.seq_num);
+		fprintf(stderr, "Retransmission with num_seq: %d\n", frame.seq_num);
 		tloe_ether_send(ether, (char *)&frame, sizeof(TloeFrame));
 
 		element->state = TLOE_RESENT;

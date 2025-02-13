@@ -49,7 +49,7 @@ TileLinkMsg *TX(tloe_endpoint_t *e, TileLinkMsg *request_normal_tlmsg) {
 		return_tlmsg = request_normal_tlmsg;
 		ack_frame = (TloeFrame *)dequeue(e->ack_buffer);
 
-#if 1 // (Test) Delayed ACK: Drop a certain number of ACK packets
+#ifdef TEST_ACK_FRAME_DROP // (Test) Delayed ACK: Drop a certain number of ACK packets
 		if (e->master == 0) {  // in case of slave
 			static int dack;
 			if (dack == 0) {
