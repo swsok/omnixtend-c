@@ -15,7 +15,7 @@ static int enqueue_retransmit_buffer(tloe_endpoint_t *e, RetransmitBufferElement
 	// Set the state to TLOE_INIT
 	rbe->state = TLOE_INIT;
 	// Get the current time
-	rbe->send_time = get_current_time();
+	rbe->send_time = get_current_timestamp(&(e->iteration_ts));
 	return enqueue(e->retransmit_buffer, rbe);
 }
 
@@ -106,7 +106,7 @@ TileLinkMsg *TX(tloe_endpoint_t *e, TileLinkMsg *request_normal_tlmsg) {
 	}
 
 	// Retransmit all the elements in the retransmit buffer if the timeout has occurred
-	if ((rbe = getfront(e->retransmit_buffer)) && is_timeout_tx(rbe->send_time)) {
+	if ((rbe = getfront(e->retransmit_buffer)) && is_timeout_tx(&(e->iteration_ts), rbe->send_time)) {
 		fprintf(stderr, "TX: Timeout TX and retranmission from seq_num: %d\n", rbe->tloe_frame.seq_num);
 		retransmit(e, rbe->tloe_frame.seq_num);
 	}

@@ -16,6 +16,7 @@ typedef struct tloe_endpoint_struct {
 	CircularQueue *ack_buffer;
 
 	timeout_t timeout_rx;
+	struct timespec iteration_ts;
 
     pthread_t tloe_endpoint_thread;
 

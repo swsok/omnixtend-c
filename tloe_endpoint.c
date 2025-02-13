@@ -35,7 +35,7 @@ void init_tloe_endpoint(tloe_endpoint_t *e, TloeEther *ether, int master_slave) 
 
 	e->ether = ether;
 
-	init_timeout_rx(&(e->timeout_rx));
+	init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
 
 	e->drop_npacket_size = 0;
 	e->drop_npacket_cnt = 0;
@@ -66,6 +66,9 @@ void *tloe_endpoint(void *arg) {
 	while(!e->is_done) {
 		if (!request_tlmsg && !is_queue_empty(e->message_buffer)) 
 			request_tlmsg = dequeue(e->message_buffer);
+
+		// Get reference timestemp for the single iteration
+		update_iteration_timestamp(&(e->iteration_ts));
 
 		not_transmitted_tlmsg = TX(e, request_tlmsg);
 		if (not_transmitted_tlmsg) {

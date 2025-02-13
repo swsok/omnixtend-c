@@ -39,7 +39,7 @@ static void serve_normal_request(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) 
 	// Delayed ACK
 	if (e->timeout_rx.ack_pending == 0) {
 		e->timeout_rx.ack_pending = 1;
-		e->timeout_rx.ack_time = get_current_time();
+		e->timeout_rx.ack_time = get_current_timestamp(&(e->iteration_ts));
 	}
 	e->timeout_rx.last_ack_seq = recv_tloeframe->seq_num;
 	// Update sequence numbers
@@ -60,7 +60,7 @@ static void serve_duplicate_request(tloe_endpoint_t *e, TloeFrame *recv_tloefram
 	// Delayed ACK
 	if (e->timeout_rx.ack_pending == 0) {
 		e->timeout_rx.ack_pending = 1;
-		e->timeout_rx.ack_time = get_current_time();
+		e->timeout_rx.ack_time = get_current_timestamp(&(e->iteration_ts));
 		e->timeout_rx.last_ack_seq = recv_tloeframe->seq_num;
 	} else if(tloe_seqnum_cmp(recv_tloeframe->seq_num, e->timeout_rx.last_ack_seq) > 0) {
 		e->timeout_rx.last_ack_seq = recv_tloeframe->seq_num;
@@ -91,7 +91,7 @@ static void serve_oos_request(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) {
 	enqueued = enqueue(e->ack_buffer, (void *) recv_tloeframe);
 	BUG_ON(!enqueued, "failed to enqueue ack frame.");
 
-	init_timeout_rx(&(e->timeout_rx));
+	init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
 
 	e->oos_cnt++;
 }
@@ -191,7 +191,7 @@ void RX(tloe_endpoint_t *e) {
 
 process_ack:
 	// Send a delayed ACK if the timeout has occurred
-	if (is_send_delayed_ack(&(e->timeout_rx))) 
+	if (is_send_delayed_ack(&(e->iteration_ts), &(e->timeout_rx)))
 		enqueue_ack_frame(e, recv_tloeframe);
 out:
 }

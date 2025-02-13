@@ -22,7 +22,7 @@ int retransmit(tloe_endpoint_t *e, int seq_num) {
 		tloe_ether_send(ether, (char *)&frame, sizeof(TloeFrame));
 
 		element->state = TLOE_RESENT;
-		element->send_time = get_current_time();
+		element->send_time = get_current_timestamp(&(e->iteration_ts));
 	}
 	return n;
 }

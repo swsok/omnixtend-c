@@ -7,14 +7,20 @@
 
 typedef struct {
 	long ack_time;
-    int last_ack_seq;
-    int ack_pending;
+	int last_ack_seq;
+	int ack_pending;
 	int ack_cnt;
 } timeout_t;
 
-long get_current_time();
-int is_timeout_tx(time_t);
-void init_timeout_rx(timeout_t *);
-int is_send_delayed_ack(timeout_t *);
+// Update the reference time
+void update_iteration_timestamp(struct timespec *);
+// Get current time in microseconds from the reference time
+long get_current_timestamp(struct timespec *);
+// Check if the timeout has occurred
+int is_timeout_tx(struct timespec *, time_t);
+// Initialize the timeout receiver
+void init_timeout_rx(struct timespec *, timeout_t *);
+// Check if the delayed ACK should be sent
+int is_send_delayed_ack(struct timespec *, timeout_t *);
 
 #endif // __TIMEOUT_H__
