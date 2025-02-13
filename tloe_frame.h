@@ -5,6 +5,14 @@
 #define TLOE_NAK        0
 #define TLOE_ACK        1
 
+#define CHANNEL_NUM     6
+#define CHANNEL_0       0
+#define CHANNEL_A       1
+#define CHANNEL_B       2
+#define CHANNEL_C       3
+#define CHANNEL_D       4
+#define CHANNEL_E       5
+
 typedef struct tloe_frame_struct {
     // header
     int seq_num;
@@ -14,6 +22,8 @@ typedef struct tloe_frame_struct {
 	
 	// Mask	
     int mask;
+	int channel;
+	int credit;
 
 	TileLinkMsg tlmsg;
 } TloeFrame;

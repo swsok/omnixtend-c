@@ -41,6 +41,11 @@ void slide_window(tloe_endpoint_t *e, int last_seq_num) {
 
         rbe = (RetransmitBufferElement *) dequeue(retransmit_buffer);
 		//printf("RX: frame.last_seq_num: %d, element->seq_num: %d\n", last_seq_num, e->tloe_frame.seq_num);
+
+		// Increase credits of received ack for flow control
+		inc_credit(&(e->fc), rbe->tloe_frame.tlmsg.channel, 1);
+		e->fc_inc_cnt++;
+
         if (rbe) free(rbe);
         rbe = (RetransmitBufferElement *) getfront(retransmit_buffer);
     }

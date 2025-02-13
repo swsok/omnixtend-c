@@ -36,11 +36,15 @@ void init_tloe_endpoint(tloe_endpoint_t *e, TloeEther *ether, int master_slave) 
 	e->ether = ether;
 
 	init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
+	init_flowcontrol(&(e->fc));
 
 	e->drop_npacket_size = 0;
 	e->drop_npacket_cnt = 0;
 	e->drop_apacket_size = 0;
 	e->drop_apacket_cnt = 0;
+
+	e->fc_inc_cnt = 0;
+	e->fc_dec_cnt = 0;
 }
 
 void close_tloe_endpoint(tloe_endpoint_t *e) {
@@ -55,6 +59,34 @@ void close_tloe_endpoint(tloe_endpoint_t *e) {
     delete_queue(e->retransmit_buffer);
     delete_queue(e->rx_buffer);
     delete_queue(e->ack_buffer);
+}
+
+void exchange_credit(tloe_endpoint_t *e) {
+    // Exchange credits
+#if 0
+    for (int i=0; i<NUM_CHANNEL; i++) {
+        TloeFrame *new_tloe = (TloeFrame *)malloc(sizeof(TloeFrame));
+
+        new_tloe->connection = 1;
+        new_tloe->channel = i + 1;
+        new_tloe->credit = 10;
+        new_tloe->mask = 0;  // Set mask (1 = normal packet)
+
+        enqueue(message_buffer, new_tloe);
+    }
+
+    // Fill credits
+    while(check_all_channels(fc_credit))
+        ;
+#else
+    for (int i=0; i<CHANNEL_NUM; i++) {
+        set_credit(&(e->fc), i, DEFAULT_CREDIT);
+    }
+#endif
+
+	while(check_all_channels(&(e->fc)))
+        ;
+
 }
 
 void *tloe_endpoint(void *arg) {
@@ -110,6 +142,8 @@ int main(int argc, char *argv[]) {
 	if (pthread_create(&(e->tloe_endpoint_thread), NULL, tloe_endpoint, e) != 0) {
         error_exit("Failed to create tloe endpoint thread");
     }
+
+	exchange_credit(e);
     
 	while(!(e->is_done)) {
 		printf("Enter 's' to status, 'a' to send, 'q' to quit:\n");
@@ -127,10 +161,15 @@ int main(int argc, char *argv[]) {
 				e->next_tx_seq, e->next_rx_seq, e->ack_cnt, 
 				e->dup_cnt, e->oos_cnt, e->delay_cnt, e->drop_cnt, 
 				e->drop_npacket_cnt, e->drop_apacket_cnt);
+			printf(" Credit: %d | %d | %d | %d | %d (%d/%d)\n", 
+				e->fc.credits[CHANNEL_A], e->fc.credits[CHANNEL_B], e->fc.credits[CHANNEL_C], 
+				e->fc.credits[CHANNEL_D], e->fc.credits[CHANNEL_E], e->fc_inc_cnt, e->fc_dec_cnt);
 			printf("-----------------------------------------------------\n");
 		} else if (input == 'a') {
 			for (int i = 0; i < iter; i++) {
 				TileLinkMsg *new_tlmsg = (TileLinkMsg *)malloc(sizeof(TileLinkMsg));
+				new_tlmsg->channel = CHANNEL_A;
+				new_tlmsg->num_flit = 4;
 				if (!new_tlmsg) {
 					printf("Memory allocation failed at packet %d!\n", i);
 					continue;

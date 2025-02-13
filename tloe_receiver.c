@@ -45,6 +45,8 @@ static void serve_normal_request(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) 
 	// Update sequence numbers
 	e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->seq_num);
 	e->acked_seq = recv_tloeframe->seq_num_ack;
+	e->timeout_rx.last_channel = recv_tloeframe->tlmsg.channel;
+	e->timeout_rx.last_credit = get_tlmsg_credit(&(recv_tloeframe->tlmsg));		//TODO
 
 	e->timeout_rx.ack_cnt++;
 	e->delay_cnt++;
@@ -108,6 +110,8 @@ static void enqueue_ack_frame(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) {
 	frame->seq_num_ack = e->timeout_rx.last_ack_seq;
 	frame->ack = TLOE_ACK;
 	frame->mask = 0;
+	frame->channel = e->timeout_rx.last_channel;
+	frame->credit = e->timeout_rx.last_credit;
 	enqueued = enqueue(e->ack_buffer, (void *) frame);
 	BUG_ON(!enqueued, "failed to enqueue ack frame.");
 
@@ -118,6 +122,7 @@ static void enqueue_ack_frame(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) {
 
 void RX(tloe_endpoint_t *e) {
 	int size;
+	chan_credit_t chan_credit;
 	tloe_rx_req_type_t req_type;
 	TloeFrame *recv_tloeframe = (TloeFrame *)malloc(sizeof(TloeFrame));
 	if (!recv_tloeframe) {

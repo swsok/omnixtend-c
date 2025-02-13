@@ -9,6 +9,8 @@ typedef struct {
 	long ack_time;
 	int last_ack_seq;
 	int ack_pending;
+	int last_channel;
+	int last_credit;
 	int ack_cnt;
 } timeout_t;
 

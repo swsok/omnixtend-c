@@ -1,8 +1,9 @@
 #ifndef __TLOE_ENDPOINT_H__
 #define __TLOE_ENDPOINT_H__
-#include "timeout.h"
 #include "tloe_ether.h"
 #include "tloe_frame.h"
+#include "timeout.h"
+#include "flowcontrol.h"
 #include "util/circular_queue.h"
 
 #define MAX_SEQ_NUM     ((1<<10)-1)
@@ -17,6 +18,8 @@ typedef struct tloe_endpoint_struct {
 
 	timeout_t timeout_rx;
 	struct timespec iteration_ts;
+
+	flowcontrol_t fc;
 
     pthread_t tloe_endpoint_thread;
 
@@ -38,6 +41,9 @@ typedef struct tloe_endpoint_struct {
 	int drop_npacket_cnt;
 	int drop_apacket_size;
 	int drop_apacket_cnt;
+
+	int fc_inc_cnt;
+	int fc_dec_cnt;
 } tloe_endpoint_t;
 
 typedef enum {

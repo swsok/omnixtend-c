@@ -32,6 +32,9 @@ static void send_request_normal_tlmsg(tloe_endpoint_t *e, TileLinkMsg *tlmsg) {
 	f->mask = 1;
 	// Set the tilelink msg
 	f->tlmsg = *tlmsg;
+	// Set 0 to channel and credit
+	f->channel = 0;
+	f->credit = 0;
 	// Send the request_normal_frame using the ether
 	tloe_ether_send(e->ether, (char *)f, sizeof(TloeFrame));
 	// Free TloeFrame
@@ -78,6 +81,14 @@ TileLinkMsg *TX(tloe_endpoint_t *e, TileLinkMsg *request_normal_tlmsg) {
 	} else if (request_normal_tlmsg && !is_queue_full(e->retransmit_buffer)) {
 		// NORMAL packet
 		// Reflect the sequence number, store in the retransmission buffer, and send
+		// Check credt for flow control
+		if (dec_credit(&(e->fc), request_normal_tlmsg->channel, 1) == 0) {
+			return_tlmsg = request_normal_tlmsg;
+			goto out;
+		} else {
+			e->fc_dec_cnt++;
+		}
+		
 		// Enqueue to retransmitBuffer
 		rbe = (RetransmitBufferElement *)malloc(sizeof(RetransmitBufferElement));
 		if (!rbe) {
