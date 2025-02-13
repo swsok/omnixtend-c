@@ -1,3 +1,7 @@
 tags
 .tags
 *.o
+*.log
+cscope.*
+.vscode
+tloe_endpoint
