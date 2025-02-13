@@ -25,7 +25,7 @@ void init_timeout_rx(struct timespec *ts, timeout_t *rx) {
 
 // Check if the delayed ACK should be sent
 int is_send_delayed_ack(struct timespec *ts, timeout_t *rx) {
-#if 1 // Disable delayed effect
+#if 0 // Disable delayed effect
 	if (rx->ack_pending == 1)	
 		return 1;
 #else

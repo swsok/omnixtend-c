@@ -8,6 +8,57 @@
 #include "retransmission.h"
 #include "timeout.h"
 
+static void serve_conn(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) {
+	// Set credits
+	set_credit(&(e->fc), recv_tloeframe->channel, recv_tloeframe->credit);
+
+	// If slave, send chan/credit message
+	if (e->master == 0) {
+		TloeFrame *f = (TloeFrame *)malloc(sizeof(TloeFrame));
+
+		f->conn = 1;
+		// Update the sequence number
+		f->seq_num = e->next_tx_seq;
+		// Update the sequence number of the ack
+		f->seq_num_ack = e->acked_seq;
+		// Set the ack to TLOE_ACK
+		f->ack = TLOE_ACK;
+		// Set the mask to indicate normal packet
+		f->mask = 0;
+		// Set 0 to channel and credit
+		f->channel = recv_tloeframe->channel;
+		f->credit = CREDIT_DEFAULT;
+		// Send the request_normal_frame using the ether
+		tloe_ether_send(e->ether, (char *)f, sizeof(TloeFrame));
+		// increase the sequence number of the endpoint
+		e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
+		// Free TloeFrame
+		free(f);
+
+		init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
+
+		// Check whether all channel/credit received
+		if (e->connection == 0) {
+			int check_con = 0;
+			for (int i=1; i < CHANNEL_NUM; i++) {
+				if (get_credit(&(e->fc), i) <= 128)
+					check_con = 1;
+			}
+
+			if (!check_con) {
+				printf("Open connection is done. Credit %d | %d | %d | %d | %d\n",
+						get_credit(&(e->fc), CHANNEL_A), get_credit(&(e->fc), CHANNEL_B),
+						get_credit(&(e->fc), CHANNEL_C), get_credit(&(e->fc), CHANNEL_D),
+						get_credit(&(e->fc), CHANNEL_E));
+				e->connection = 1;
+			}
+		}
+	}
+	// Update sequence numbers
+	e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->seq_num);
+	e->acked_seq = recv_tloeframe->seq_num_ack;
+}
+
 static void serve_ack(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) {
 	// Slide retransmission buffer for flushing ancester frames
 	// Note that ACK/NAK transmit the sequence number of the received frame as seq_num_ack
@@ -136,6 +187,11 @@ void RX(tloe_endpoint_t *e) {
 		free(recv_tloeframe);
 		goto process_ack;
 	}
+
+	// Connection/Disconnection 
+	if (is_conn_msg(recv_tloeframe)) {
+		serve_conn(e, recv_tloeframe);
+	}	
 
 	// ACK/NAK (zero-TileLink)
 	if (is_ack_msg(recv_tloeframe)) {

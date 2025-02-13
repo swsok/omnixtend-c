@@ -3,10 +3,11 @@
 #include <string.h>
 #include "flowcontrol.h"
 #include "tilelink_msg.h"
+#include "tloe_frame.h"
 
 void init_flowcontrol(flowcontrol_t *fc) {
 	for (int i=0; i<CHANNEL_NUM; i++) 
-		fc->credits[i] = 0;	
+		set_credit(fc, i, CREDIT_INIT);	
 }
 
 void set_credit(flowcontrol_t *fc, int channel, int credit) {
@@ -14,7 +15,7 @@ void set_credit(flowcontrol_t *fc, int channel, int credit) {
 }
 
 int check_all_channels(flowcontrol_t *fc) {
-    int result = 0;
+    int result = 1;
     printf("Wait until all channels have their credits set.....\n");
 
     while(!(fc->credits[CHANNEL_A] && \
@@ -45,16 +46,6 @@ int dec_credit(flowcontrol_t *fc, int channel, int credit) {
     return result;
 }
 
-#if 0
-flowcontrol_t *create_credit() {
-    flowcontrol_t *fc = (flowcontrol_t *) malloc (sizeof(flowcontrol_t));
-    memset(fc, 0, sizeof(flowcontrol_t));
-
-    return fc;
-}
-
 int get_credit(flowcontrol_t *fc, const int channel) {
-    return fc->available_credits[channel];
+    return fc->credits[channel];
 }
-
-#endif

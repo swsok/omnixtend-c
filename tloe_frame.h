@@ -15,6 +15,7 @@
 
 typedef struct tloe_frame_struct {
     // header
+	int conn;
     int seq_num;
     int seq_num_ack;
     int ack; // ack = 1; nack = 0
@@ -42,5 +43,6 @@ int tloe_get_ack(TloeFrame *frame);
 int tloe_set_mask(TloeFrame *frame, int mask);
 int tloe_get_mask(TloeFrame *frame);
 int is_ack_msg(TloeFrame *frame);
+int is_conn_msg(TloeFrame *);
 
 #endif // __TLOE_FRAME_H__

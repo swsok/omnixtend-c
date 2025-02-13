@@ -23,8 +23,9 @@ typedef struct tloe_endpoint_struct {
 
     pthread_t tloe_endpoint_thread;
 
-	int is_done;
+	int connection;
 	int master;
+	int is_done;
 
 	int next_tx_seq;
 	int next_rx_seq;

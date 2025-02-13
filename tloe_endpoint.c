@@ -21,6 +21,7 @@
 
 void init_tloe_endpoint(tloe_endpoint_t *e, TloeEther *ether, int master_slave) {
 	e->is_done = 0;
+	e->connection = 0;
 	e->master = master_slave;
 
 	e->next_tx_seq = 0;
@@ -37,6 +38,12 @@ void init_tloe_endpoint(tloe_endpoint_t *e, TloeEther *ether, int master_slave) 
 
 	init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
 	init_flowcontrol(&(e->fc));
+
+	e->ack_cnt = 0;
+	e->dup_cnt = 0;
+	e->oos_cnt = 0;
+	e->delay_cnt = 0;
+	e->drop_cnt = 0;
 
 	e->drop_npacket_size = 0;
 	e->drop_npacket_cnt = 0;
@@ -61,32 +68,14 @@ void close_tloe_endpoint(tloe_endpoint_t *e) {
     delete_queue(e->ack_buffer);
 }
 
-void exchange_credit(tloe_endpoint_t *e) {
-    // Exchange credits
-#if 0
-    for (int i=0; i<NUM_CHANNEL; i++) {
-        TloeFrame *new_tloe = (TloeFrame *)malloc(sizeof(TloeFrame));
+int is_conn(tloe_endpoint_t *e) {
+	int result = 0;
+	if (e->connection == 0)
+		printf("Initiate the connection first.\n");
+	else
+		result = 1;
 
-        new_tloe->connection = 1;
-        new_tloe->channel = i + 1;
-        new_tloe->credit = 10;
-        new_tloe->mask = 0;  // Set mask (1 = normal packet)
-
-        enqueue(message_buffer, new_tloe);
-    }
-
-    // Fill credits
-    while(check_all_channels(fc_credit))
-        ;
-#else
-    for (int i=0; i<CHANNEL_NUM; i++) {
-        set_credit(&(e->fc), i, DEFAULT_CREDIT);
-    }
-#endif
-
-	while(check_all_channels(&(e->fc)))
-        ;
-
+	return result;
 }
 
 void *tloe_endpoint(void *arg) {
@@ -143,10 +132,10 @@ int main(int argc, char *argv[]) {
         error_exit("Failed to create tloe endpoint thread");
     }
 
-	exchange_credit(e);
+	//exchange_credit(e);
     
 	while(!(e->is_done)) {
-		printf("Enter 's' to status, 'a' to send, 'q' to quit:\n");
+		printf("Enter 'c' to open, 'd' to close, 's' to status, 'a' to send, 'q' to quit:\n");
 		printf("> ");
 		fgets(input_count, sizeof(input_count), stdin);
 
@@ -166,6 +155,7 @@ int main(int argc, char *argv[]) {
 				e->fc.credits[CHANNEL_D], e->fc.credits[CHANNEL_E], e->fc_inc_cnt, e->fc_dec_cnt);
 			printf("-----------------------------------------------------\n");
 		} else if (input == 'a') {
+			if (!is_conn(e)) continue;
 			for (int i = 0; i < iter; i++) {
 				TileLinkMsg *new_tlmsg = (TileLinkMsg *)malloc(sizeof(TileLinkMsg));
 				new_tlmsg->channel = CHANNEL_A;
@@ -187,11 +177,32 @@ int main(int argc, char *argv[]) {
 					break;  // Stop if buffer is full
 				}
 			}
+		} else if (input == 'c') {
+			// Connection
+			if (!e->master) {
+				printf("The connection should be initiated by the master.\n");
+				continue;
+			}
+
+			open_conn(e);
+			if (check_all_channels(&(e->fc))) {
+				printf("Open connection is done. Credit %d | %d | %d | %d | %d\n",
+					get_credit(&(e->fc), CHANNEL_A), get_credit(&(e->fc), CHANNEL_B),
+					get_credit(&(e->fc), CHANNEL_C), get_credit(&(e->fc), CHANNEL_D),
+					get_credit(&(e->fc), CHANNEL_E));
+				e->connection = 1;
+			}
+		} else if (input == 'd') {
+			// Disconnection
+			init_tloe_endpoint(e, ether, master_slave);
 		} else if (input == 'q') {
 			e->is_done = 1;
 			printf("Exiting...\n");
 			break;
+		} else {
+			if (!is_conn(e)) continue;
 		}
+
 	}
 
 	close_tloe_endpoint(e);

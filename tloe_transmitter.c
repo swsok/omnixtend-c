@@ -4,8 +4,27 @@
 #include "tloe_common.h"
 #include "tloe_transmitter.h"
 #include "tloe_endpoint.h"
+#include "tloe_frame.h"
 #include "retransmission.h"
 #include "timeout.h"
+
+void open_conn(tloe_endpoint_t *e) {
+	TloeEther *ether = e->ether;
+
+	for (int i = 1; i < CHANNEL_NUM; i++) {
+		TloeFrame tloeframe;
+	
+		tloeframe.seq_num = e->next_tx_seq;
+		tloeframe.seq_num_ack = e->acked_seq;
+		tloeframe.conn = 1;
+		tloeframe.channel = i;
+		tloeframe.credit = CREDIT_DEFAULT;
+		tloeframe.mask = 0;
+		tloe_ether_send(ether, (char *)&tloeframe, sizeof(TloeFrame));
+
+		e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
+	}
+}
 
 static int enqueue_retransmit_buffer(tloe_endpoint_t *e, RetransmitBufferElement *rbe, TileLinkMsg *tlmsg) {
 	// Update the sequence number
