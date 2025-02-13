@@ -15,7 +15,7 @@ typedef struct tloe_endpoint_struct {
 	CircularQueue *message_buffer;
 	CircularQueue *ack_buffer;
 
-	TimeoutRX timeout_rx;
+	timeout_t timeout_rx;
 
     pthread_t tloe_endpoint_thread;
 
@@ -32,6 +32,11 @@ typedef struct tloe_endpoint_struct {
 	int oos_cnt;
 	int delay_cnt;
 	int drop_cnt;
+
+	int drop_npacket_size;
+	int drop_npacket_cnt;
+	int drop_apacket_size;
+	int drop_apacket_cnt;
 } tloe_endpoint_t;
 
 typedef enum {

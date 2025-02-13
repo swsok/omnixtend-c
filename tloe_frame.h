@@ -1,5 +1,6 @@
 #ifndef __TLOE_FRAME_H__
 #define __TLOE_FRAME_H__
+#include "tilelink_msg.h"
 
 #define TLOE_NAK        0
 #define TLOE_ACK        1
@@ -13,6 +14,8 @@ typedef struct tloe_frame_struct {
 	
 	// Mask	
     int mask;
+
+	TileLinkMsg tlmsg;
 } TloeFrame;
 
 typedef struct tloe_buffer_struct {

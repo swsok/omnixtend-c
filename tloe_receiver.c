@@ -8,10 +8,6 @@
 #include "retransmission.h"
 #include "timeout.h"
 
-extern int test_timeout;
-int test_timeout_tx = 10;
-int drop_ack = 0;
-
 static void serve_ack(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) {
 	// Slide retransmission buffer for flushing ancester frames
 	// Note that ACK/NAK transmit the sequence number of the received frame as seq_num_ack
@@ -43,7 +39,7 @@ static void serve_normal_request(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) 
 	// Delayed ACK
 	if (e->timeout_rx.ack_pending == 0) {
 		e->timeout_rx.ack_pending = 1;
-		e->timeout_rx.last_ack_time = get_current_time();
+		e->timeout_rx.ack_time = get_current_time();
 	}
 	e->timeout_rx.last_ack_seq = recv_tloeframe->seq_num;
 	// Update sequence numbers
@@ -64,7 +60,7 @@ static void serve_duplicate_request(tloe_endpoint_t *e, TloeFrame *recv_tloefram
 	// Delayed ACK
 	if (e->timeout_rx.ack_pending == 0) {
 		e->timeout_rx.ack_pending = 1;
-		e->timeout_rx.last_ack_time = get_current_time();
+		e->timeout_rx.ack_time = get_current_time();
 		e->timeout_rx.last_ack_seq = recv_tloeframe->seq_num;
 	} else if(tloe_seqnum_cmp(recv_tloeframe->seq_num, e->timeout_rx.last_ack_seq) > 0) {
 		e->timeout_rx.last_ack_seq = recv_tloeframe->seq_num;
@@ -134,16 +130,6 @@ void RX(tloe_endpoint_t *e) {
 		goto process_ack;
 	}
 
-#if 0 // (Test) Timout TX: drop normal packet
-	{
-		if (test_timeout-- > 0) {
-			printf("Drop packet of seq_num %d\n", recv_tloeframe->seq_num);
-			free(recv_tloeframe);
-			goto process_ack;
-		}
-	}
-#endif
-
 	// ACK/NAK (zero-TileLink)
 	if (is_ack_msg(recv_tloeframe)) {
 		serve_ack(e, recv_tloeframe);
@@ -152,6 +138,26 @@ void RX(tloe_endpoint_t *e) {
 		goto process_ack;
 	}
 
+#if 0 // (Test) Delayed ACK: Drop a certain number of normal packets
+	if (e->master == 0) {  // in case of slave
+		static int dack;
+		if (dack == 0) {
+			if ((rand() % 1000) < 1) {
+				dack == 1;
+				e->drop_npacket_size = 4;
+			}
+		}
+
+		if (e->drop_npacket_size-- > 0) {
+			//printf("Drop normal packet of seq_num %d\n", recv_tloeframe->seq_num);
+			e->drop_npacket_cnt++;
+			free(recv_tloeframe);
+			if (e->drop_npacket_size == 0) dack = 0;
+			goto process_ack;
+		}
+	}
+#endif
+	
 	// printf("RX: Received packet with seq_num: %d, seq_num_ack: %d, ack: %d\n",
 	//     tloeframe->seq_num, tloeframe->seq_num_ack, tloeframe->ack);
 	req_type = tloe_rx_get_req_type(e, recv_tloeframe);
@@ -184,23 +190,9 @@ void RX(tloe_endpoint_t *e) {
 	}
 
 process_ack:
-	// Timeout RX
-	if (is_send_delayed_ack(&(e->timeout_rx))) {
-#if 0  // (Test) Timeout TX: drop ack
-        if (!drop_ack && ((rand() % 100) == 1)) {
-			drop_ack = 1;	
-			test_timeout_tx = 10;
-		}
-		if (drop_ack && (test_timeout_tx > 0)) {
-			test_timeout_tx -= 1;
-			if (test_timeout_tx == 0) drop_ack = 0; 
-		} else {
-#endif
+	// Send a delayed ACK if the timeout has occurred
+	if (is_send_delayed_ack(&(e->timeout_rx))) 
 		enqueue_ack_frame(e, recv_tloeframe);
-#if 0
-		}
-#endif
-	}
 out:
 }
 
