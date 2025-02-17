@@ -79,28 +79,71 @@ static void serve_ack(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) {
 	}
 }
 
+static void serve_oos_request(tloe_endpoint_t *e, TloeFrame *recv_tloeframe, int seq_num) {
+	int enqueued;
+	// The received TLoE frame is out of sequence, indicating that some frames were lost
+	// The frame should be dropped, NEXT_RX_SEQ is not updated
+	// A negative acknowledgment (NACK) is sent using the last properly received sequence number
+	int last_proper_rx_seq = seq_num == -1 ? tloe_seqnum_prev(e->next_rx_seq) : seq_num;
+
+	fprintf(stderr, "TLoE frame is out of sequence with "
+			"seq_num: %d, next_rx_seq: %d, last: %d\n",
+			recv_tloeframe->seq_num, e->next_rx_seq, last_proper_rx_seq);
+
+	// If the received frame contains data, enqueue it in the message buffer
+	BUG_ON(is_ack_msg(recv_tloeframe), "received frame must not be an ack frame.");
+
+	recv_tloeframe->seq_num_ack = last_proper_rx_seq;
+	recv_tloeframe->ack = TLOE_NAK;  // NAK
+	recv_tloeframe->mask = 0; // To indicate ACK
+	enqueued = enqueue(e->ack_buffer, (void *) recv_tloeframe);
+	BUG_ON(!enqueued, "failed to enqueue ack frame.");
+
+	init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
+
+	e->oos_cnt++;
+}
+
 static void serve_normal_request(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) {
-	// Handle TileLink Msg
-	// TODO
+	int is_nak = 0;
 	// printf("RX: Send pakcet to Tx channel for replying ACK/NAK with seq_num: %d, seq_num_ack: %d, ack: %d\n",
 	//    tloeframe->seq_num, tloeframe->seq_num_ack, tloeframe->ack);
+	// Handle TileLink Msg
+	TileLinkMsg *tlmsg = (TileLinkMsg *)malloc(sizeof(TileLinkMsg));
+	*tlmsg = recv_tloeframe->tlmsg;
 
-	// do something for handling the TileLink Msg
-
-	// Delayed ACK
-	if (e->timeout_rx.ack_pending == 0) {
-		e->timeout_rx.ack_pending = 1;
-		e->timeout_rx.ack_time = get_current_timestamp(&(e->iteration_ts));
+	// if tlmsg_buffer is full, send NAK 
+	// else send ACK
+	if (is_queue_full(e->tl_msg_buffer)) {
+		is_nak = 1;
+		serve_oos_request(e, recv_tloeframe, tloe_seqnum_prev(recv_tloeframe->seq_num));
+		printf("tl_msg_buffer is full. Send NAK. seq_num: %d\n", recv_tloeframe->seq_num);
+		e->drop_tlmsg_cnt++;
+	} else {
+		// Delayed ACK
+		if (e->timeout_rx.ack_pending == 0) {
+			e->timeout_rx.ack_pending = 1;
+			e->timeout_rx.ack_time = get_current_timestamp(&(e->iteration_ts));
+		}
+		e->timeout_rx.last_ack_seq = recv_tloeframe->seq_num;
 	}
-	e->timeout_rx.last_ack_seq = recv_tloeframe->seq_num;
-	// Update sequence numbers
-	e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->seq_num);
-	e->acked_seq = recv_tloeframe->seq_num_ack;
-	e->timeout_rx.last_channel = recv_tloeframe->tlmsg.channel;
-	e->timeout_rx.last_credit = get_tlmsg_credit(&(recv_tloeframe->tlmsg));		//TODO
 
-	e->timeout_rx.ack_cnt++;
-	e->delay_cnt++;
+	// Enqueue to tl_msg_buffer for processing TileLink message if not NAK
+	if (!is_nak) {
+		// Update sequence numbers
+		e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->seq_num);
+		e->acked_seq = recv_tloeframe->seq_num_ack;
+		e->timeout_rx.last_channel = recv_tloeframe->tlmsg.channel;
+		e->timeout_rx.last_credit = get_tlmsg_credit(&(recv_tloeframe->tlmsg));		//TODO
+
+		if (!enqueue(e->tl_msg_buffer, (void *) tlmsg)) { 
+			fprintf(stderr, "tl_msg_buffer overflow.\n");
+			exit(1);
+		}
+
+		e->timeout_rx.ack_cnt++;
+		e->delay_cnt++;
+	}
 }
 
 static void serve_duplicate_request(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) {
@@ -124,31 +167,6 @@ static void serve_duplicate_request(tloe_endpoint_t *e, TloeFrame *recv_tloefram
 	e->timeout_rx.ack_cnt++;
 	e->delay_cnt++;
 	e->dup_cnt++;
-}
-
-static void serve_oos_request(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) {
-	int enqueued;
-	// The received TLoE frame is out of sequence, indicating that some frames were lost
-	// The frame should be dropped, NEXT_RX_SEQ is not updated
-	// A negative acknowledgment (NACK) is sent using the last properly received sequence number
-	int last_proper_rx_seq = tloe_seqnum_prev(e->next_rx_seq);
-
-	fprintf(stderr, "TLoE frame is out of sequence with "
-			"seq_num: %d, next_rx_seq: %d last: %d\n",
-			recv_tloeframe->seq_num, e->next_rx_seq, last_proper_rx_seq);
-
-	// If the received frame contains data, enqueue it in the message buffer
-	BUG_ON(is_ack_msg(recv_tloeframe), "received frame must not be an ack frame.");
-
-	recv_tloeframe->seq_num_ack = last_proper_rx_seq;
-	recv_tloeframe->ack = TLOE_NAK;  // NAK
-	recv_tloeframe->mask = 0; // To indicate ACK
-	enqueued = enqueue(e->ack_buffer, (void *) recv_tloeframe);
-	BUG_ON(!enqueued, "failed to enqueue ack frame.");
-
-	init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
-
-	e->oos_cnt++;
 }
 
 static void enqueue_ack_frame(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) {
@@ -201,12 +219,12 @@ void RX(tloe_endpoint_t *e) {
 		goto process_ack;
 	}
 
-#ifdef TEST_NORMAL_FRAME_DROP // (Test) Delayed ACK: Drop a certain number of normal packets
+#ifdef TEST_TIMEOUT_DROP // (Test) Delayed ACK: Drop a certain number of normal packets
 	if (e->master == 0) {  // in case of slave
 		static int dack;
 		if (dack == 0) {
 			if ((rand() % 1000) < 1) {
-				dack == 1;
+				dack = 1;
 				e->drop_npacket_size = 4;
 			}
 		}
@@ -226,6 +244,27 @@ void RX(tloe_endpoint_t *e) {
 	req_type = tloe_rx_get_req_type(e, recv_tloeframe);
 	switch (req_type) {
 		case REQ_NORMAL:
+
+#ifdef TEST_NORMAL_FRAME_DROP // (Test) Delayed ACK: Drop a certain number of normal packets
+{
+	static int dack;
+	if (dack == 0) {
+		if ((rand() % 1000) < 1) {
+			dack = 1;
+			e->drop_npacket_size = 4;
+		}
+	}
+
+	if (e->drop_npacket_size-- > 0) {
+		//printf("Drop normal packet of seq_num %d\n", recv_tloeframe->seq_num);
+		e->drop_npacket_cnt++;
+		//free(recv_tloeframe);
+		if (e->drop_npacket_size == 0) dack = 0;
+		goto process_ack;
+	}
+}
+#endif
+	
 #ifdef TEST_NORMAL_FRAME_DROP
 			if ((rand() % 10000) == 99) {
 				e->drop_cnt++;
@@ -248,7 +287,7 @@ void RX(tloe_endpoint_t *e) {
 			break;
 		case REQ_OOS:
 			// recv_tloeframe is not freed here because of the enqueue
-			serve_oos_request(e, recv_tloeframe);
+			serve_oos_request(e, recv_tloeframe, -1);
 			break;
 	}
 

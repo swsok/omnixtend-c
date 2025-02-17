@@ -14,6 +14,7 @@
 #include "tloe_transmitter.h"
 #include "tloe_receiver.h"
 #include "tilelink_msg.h"
+#include "tilelink_handler.h"
 #include "retransmission.h"
 #include "timeout.h"
 #include "util/circular_queue.h"
@@ -33,6 +34,8 @@ void init_tloe_endpoint(tloe_endpoint_t *e, TloeEther *ether, int master_slave) 
     e->rx_buffer = create_queue(10); // credits
 	e->message_buffer = create_queue(10000);
 	e->ack_buffer = create_queue(100);
+	e->tl_msg_buffer = create_queue(100);
+	e->response_buffer = create_queue(100);
 
 	e->ether = ether;
 
@@ -52,6 +55,9 @@ void init_tloe_endpoint(tloe_endpoint_t *e, TloeEther *ether, int master_slave) 
 
 	e->fc_inc_cnt = 0;
 	e->fc_dec_cnt = 0;
+
+	e->drop_tlmsg_cnt = 0;
+	e->drop_response_cnt = 0;
 }
 
 void close_tloe_endpoint(tloe_endpoint_t *e) {
@@ -66,6 +72,8 @@ void close_tloe_endpoint(tloe_endpoint_t *e) {
     delete_queue(e->retransmit_buffer);
     delete_queue(e->rx_buffer);
     delete_queue(e->ack_buffer);
+	delete_queue(e->tl_msg_buffer);
+	delete_queue(e->response_buffer);
 }
 
 int is_conn(tloe_endpoint_t *e) {
@@ -78,6 +86,21 @@ int is_conn(tloe_endpoint_t *e) {
 	return result;
 }
 
+// Select data to process from buffers based on priority order  
+// ack_buffer -> response_buffer -> message_buffer
+TileLinkMsg *select_buffer(tloe_endpoint_t *e) {
+	TileLinkMsg *tlmsg = NULL;
+
+	tlmsg = (TileLinkMsg *) dequeue(e->response_buffer);
+	if (tlmsg) 
+		goto out;
+
+	tlmsg = (TileLinkMsg *) dequeue(e->message_buffer);
+out:
+	return tlmsg;
+	// TODO free(tlmsg);
+}
+
 void *tloe_endpoint(void *arg) {
 	tloe_endpoint_t *e = (tloe_endpoint_t *)arg;
 
@@ -85,8 +108,8 @@ void *tloe_endpoint(void *arg) {
 	TileLinkMsg *not_transmitted_tlmsg = NULL;
 
 	while(!e->is_done) {
-		if (!request_tlmsg && !is_queue_empty(e->message_buffer)) 
-			request_tlmsg = dequeue(e->message_buffer);
+		if (!request_tlmsg)
+			request_tlmsg = select_buffer(e);
 
 		// Get reference timestemp for the single iteration
 		update_iteration_timestamp(&(e->iteration_ts));
@@ -101,6 +124,8 @@ void *tloe_endpoint(void *arg) {
 		}
 
 		RX(e);
+
+		tl_handler(e);
 	}
 }
 
@@ -132,8 +157,6 @@ int main(int argc, char *argv[]) {
         error_exit("Failed to create tloe endpoint thread");
     }
 
-	//exchange_credit(e);
-    
 	while(!(e->is_done)) {
 		printf("Enter 'c' to open, 'd' to close, 's' to status, 'a' to send, 'q' to quit:\n");
 		printf("> ");
@@ -153,12 +176,15 @@ int main(int argc, char *argv[]) {
 			printf(" Credit: %d | %d | %d | %d | %d (%d/%d)\n", 
 				e->fc.credits[CHANNEL_A], e->fc.credits[CHANNEL_B], e->fc.credits[CHANNEL_C], 
 				e->fc.credits[CHANNEL_D], e->fc.credits[CHANNEL_E], e->fc_inc_cnt, e->fc_dec_cnt);
+			printf(" Drop_tlmsg: %d, Drop_response: %d\n",
+				e->drop_tlmsg_cnt, e->drop_response_cnt);
 			printf("-----------------------------------------------------\n");
 		} else if (input == 'a') {
 			if (!is_conn(e)) continue;
 			for (int i = 0; i < iter; i++) {
 				TileLinkMsg *new_tlmsg = (TileLinkMsg *)malloc(sizeof(TileLinkMsg));
 				new_tlmsg->channel = CHANNEL_A;
+				new_tlmsg->opcode = A_GET_OPCODE;
 				new_tlmsg->num_flit = 4;
 				if (!new_tlmsg) {
 					printf("Memory allocation failed at packet %d!\n", i);

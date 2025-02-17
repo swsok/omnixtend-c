@@ -68,10 +68,10 @@ TileLinkMsg *TX(tloe_endpoint_t *e, TileLinkMsg *request_normal_tlmsg) {
 	if (!is_queue_empty(e->ack_buffer)) {
 		TloeFrame *ack_frame;
 
-		return_tlmsg = request_normal_tlmsg;
+//		return_tlmsg = request_normal_tlmsg;
 		ack_frame = (TloeFrame *)dequeue(e->ack_buffer);
 
-#ifdef TEST_ACK_FRAME_DROP // (Test) Delayed ACK: Drop a certain number of ACK packets
+#ifdef TEST_TIMEOUT_DROP // (Test) Delayed ACK: Drop a certain number of ACK packets
 		if (e->master == 0) {  // in case of slave
 			static int dack;
 			if (dack == 0) {
@@ -96,8 +96,13 @@ TileLinkMsg *TX(tloe_endpoint_t *e, TileLinkMsg *request_normal_tlmsg) {
 		tloe_ether_send(e->ether, (char *)ack_frame, sizeof(TloeFrame));
 
 		// ack_frame must be freed because of the dequeue
-		free(ack_frame);
+		//free(ack_frame);
+#if 0
 	} else if (request_normal_tlmsg && !is_queue_full(e->retransmit_buffer)) {
+#else
+	} 
+	if (request_normal_tlmsg && !is_queue_full(e->retransmit_buffer)) {
+#endif
 		// NORMAL packet
 		// Reflect the sequence number, store in the retransmission buffer, and send
 		// Check credt for flow control
