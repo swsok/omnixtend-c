@@ -50,19 +50,6 @@
 // Channel E
 #define E_GRANTACK              0  // Not required opcode
 
-#if 0
-// TileLink messag with Data and without Mask
-typedef struct tilelink_message_struct {
-	int channel;
-	int opcode; 
-	int num_flit;
-
-    char header1[8];
-    char header2[8];
-    char data[0];
-} TileLinkMsg;
-#endif
-
 typedef struct tilelink_header_struct {
     uint8_t reserved1:1;
     uint8_t chan:3;

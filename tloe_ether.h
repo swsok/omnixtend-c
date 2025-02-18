@@ -23,6 +23,7 @@ size_t tloe_ether_recv(TloeEther *eth, char *data);
 TloeEther *tloe_ether_alloc_and_init(void);
 TloeEther *tloe_ether_open(char *queue_name, int master_slave);
 void tloe_ether_close(TloeEther *eth);
-
+void set_tloe_ether(tloe_ether_header_t *, char *, char *, unsigned short);
+tloe_ether_header_t get_tloe_ether();
 
 #endif // __TLOE_ETHER_H__

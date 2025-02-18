@@ -7,25 +7,6 @@
 #define TLOE_ACK        1
 #define MAX_SIZE_FLIT   65
 
-/*
-typedef struct tloe_frame_struct {
-    // header
-	int conn;
-    int seq_num;
-    int seq_num_ack;
-    int ack; // ack = 1; nack = 0
-    // TL messages 
-	
-	// Mask	
-    int mask;
-	int channel;
-	int credit;
-
-	tl_msg_t tlmsg;
-} TloeFrame;
-*/
-
-// TLoE Frame Header 구조체
 typedef struct {
     uint8_t vc:3;                  // Virtual Channel (3 bits)
     uint8_t type:4;                // Type (4 bits) : 1(Ack only) 2(Open Connection) 3(Close Connection)
@@ -44,6 +25,7 @@ typedef struct __attribute__((packed,aligned(8))) {
     uint64_t flits[MAX_SIZE_FLIT];
 } tloe_frame_t;
 
+void set_tloe_frame(tloe_frame_t *, tl_msg_t *, uint32_t, uint32_t, uint8_t, uint8_t, uint8_t);
 int tloe_set_seq_num(tloe_frame_t *, int);
 int tloe_get_seq_num(tloe_frame_t *);
 int tloe_set_seq_num_ack(tloe_frame_t *, int);

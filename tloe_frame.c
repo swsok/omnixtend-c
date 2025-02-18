@@ -3,6 +3,16 @@
 #include <stdlib.h>
 #include "tloe_frame.h"
 
+void set_tloe_frame(tloe_frame_t *tloeframe, tl_msg_t *tlmsg, uint32_t seq_num, uint32_t seq_num_ack, uint8_t ack, uint8_t chan, uint8_t credit) {
+    tloeframe->ether = get_tloe_ether();
+    tloeframe->header.seq_num = seq_num;
+    tloeframe->header.seq_num_ack = seq_num_ack;
+    tloeframe->header.ack = ack;
+    tloeframe->header.chan = chan;
+    tloeframe->header.credit = credit;
+	tloe_set_tlmsg(tloeframe, tlmsg, 0);
+}
+
 int tloe_set_seq_num(tloe_frame_t *frame, int seq_num) {
     frame->header.seq_num = seq_num;
     return seq_num;

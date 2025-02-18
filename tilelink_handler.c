@@ -6,9 +6,52 @@
 #include "tilelink_handler.h"
 #include "util/circular_queue.h"
 
+#define MEM_SIZE  (4ULL * 1024 * 1024 * 1024)     // 8GB
+
+char mem_storage[MEM_SIZE];
+
+void handle_A_PUTFULLDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
+    // Write data to memory
+    int data_size = 1 << (tl->header.size);
+    int mem_offset = (tl->address) % MEM_SIZE;
+    memcpy(mem_storage + mem_offset, tl->data, data_size);
+
+    // Make tilelink response(AccessAck) and set data
+	tl_msg_t *tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));	
+	tlmsg->header.chan = CHANNEL_D;
+	tlmsg->header.opcode = D_ACCESSACK_OPCODE;
+
+    if (!enqueue(e->response_buffer, tlmsg)) {
+		printf("Failed to enqueue packet, buffer is full.\n");
+		e->drop_response_cnt++;
+		free(tlmsg);
+    }
+}
+
+void handle_A_GET_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
+    // Read data from memory
+    int data_size = 1 << (tl->header.size);
+    uint64_t *data = (uint64_t *)malloc(sizeof(uint64_t) * data_size);
+    memcpy(data, mem_storage, data_size);
+
+    // Make tilelink response(AccessAckData) and set data
+	tl_msg_t *tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));	
+	tlmsg->header.chan = CHANNEL_D;
+	tlmsg->header.opcode = D_ACCESSACKDATA_OPCODE;
+
+	if (!enqueue(e->response_buffer, tlmsg)) {
+		printf("Failed to enqueue packet, buffer is full.\n");
+		e->drop_response_cnt++;
+		free(data);
+		free(tlmsg);
+	}
+
+    free(data);
+}
+
 void tl_handler(tloe_endpoint_t *e) {
-	// dequeue from th_buffer
-	tl_msg_t *tlmsg;
+    // Handling TileLink Msg
+    tl_msg_t *tlmsg;
 
 	if (is_queue_empty(e->tl_msg_buffer))
 		goto out;
@@ -20,68 +63,155 @@ void tl_handler(tloe_endpoint_t *e) {
 
 	tlmsg = (tl_msg_t *)dequeue(e->tl_msg_buffer); 
 
-	// handle & make reponse
-	switch (tlmsg->header.opcode) {
-	case A_GET_OPCODE:
-		tlmsg->header.chan = CHANNEL_D;
-		tlmsg->header.opcode = C_ACCESSACKDATA_OPCODE;
+    uint8_t tl_chan = tlmsg->header.chan;
+    uint8_t tl_opcode = tlmsg->header.opcode;
 
-		if (!enqueue(e->response_buffer, tlmsg)) {
-			//printf("Failed to enqueue packet %d, buffer is full.\n", tloeframe->seq_num);
-			e->drop_response_cnt++;
-			free(tlmsg);
-			goto out;
+	switch (tl_chan) {
+	case CHANNEL_A:
+		switch (tl_opcode) {
+		case A_PUTFULLDATA_OPCODE:
+            // return AccessAck
+            handle_A_PUTFULLDATA_opcode(e, tlmsg);
+			break;
+		case A_PUTPARTIALDATA_OPCODE:
+            // return AccessAck
+            // to-be implemented
+			break;
+		case A_ARITHMETICDATA_OPCODE:
+            // return AccessAckData
+            // to-be implemented
+			break;
+		case A_LOGICALDATA_OPCODE:
+            // return AccessAckData
+            // to-be implemented
+			break;
+		case A_GET_OPCODE:
+            // return AccessAckData
+            handle_A_GET_opcode(e, tlmsg);
+			break;
+		case A_INTENT_OPCODE:
+            // return HintAck
+            // to-be implemented
+			break;
+		case A_ACQUIREBLOCK_OPCODE:
+            // return Grant or GrantData
+            // to-be implemented
+			break;
+		case A_ACQUIREPERM_OPCODE:
+            // return Grant
+            // to-be implemented
+			break;
 		}
 		break;
-	case C_ACCESSACKDATA_OPCODE:
+	case CHANNEL_B:
+		switch (tl_opcode) {
+		case B_PUTFULLDATA_OPCODE:
+            // return AccessAck
+            // to-be implemented
+			break;
+		case B_PUTPARTIALDATA_OPCODE:
+            // return AccessAck
+            // to-be implemented
+			break;
+		case B_ARITHMETICDATA_OPCODE:
+            // return AccessAckData
+            // to-be implemented
+			break;
+		case B_LOGICALDATA_OPCODE:
+            // return AccessAckData
+            // to-be implemented
+			break;
+		case B_GET_OPCODE:
+            // return AccessAckData
+            // to-be implemented
+			break;
+		case B_INTENT_OPCODE:
+            // return HintAck
+            // to-be implemented
+			break;
+		case B_PROBEBLOCK_OPCODE:
+            // return ProbeAck or ProbeAckData
+            // to-be implemented
+			break;
+		case B_PROBEPERM_OPCODE:
+            // return ProbeAck
+            // to-be implemented
+			break;
+		}
 		break;
-	default:	
+	case CHANNEL_C:
+		switch (tl_opcode) {
+		case C_ACCESSACK_OPCODE:
+            // return
+			break;
+		case C_ACCESSACKDATA_OPCODE:
+            // return
+			break;
+		case C_HINTACK_OPCODE:
+            // return
+            // to-be implemented
+			break;
+		case C_PROBEACK_OPCODE:
+            // return
+            // to-be implemented
+			break;
+		case C_PROBEACKDATA_OPCODE:
+            // return
+            // to-be implemented
+			break;
+		case C_RELEASE_OPCODE:
+            // return ReleaseAck
+            // to-be implemented
+			break;
+		case C_RELEASEDATA_OPCODE:
+            // return ReleaseAck
+            // to-be implemented
+			break;
+		}
+		break;
+	case CHANNEL_D:
+		switch (tl_opcode) {
+		case D_ACCESSACK_OPCODE:
+            // return
+            // to-be implemented
+			break;
+		case D_ACCESSACKDATA_OPCODE:
+            // return
+            // to-be implemented
+			break;
+		case D_HINTACK_OPCODE:
+            // return
+            // to-be implemented
+			break;
+		case D_GRANT_OPCODE:
+            // return
+            // to-be implemented
+			break;
+		case D_GRANTDATA_OPCODE:
+            // return
+            // to-be implemented
+			break;
+		case D_RELEASEACK_OPCODE:
+            // return
+            // to-be implemented
+			break;
+		}		
+		break;
+	case CHANNEL_E:
+		switch (tl_opcode) {
+		case E_GRANTACK:
+            // return
+            // to-be implemented
+			break;
+		}
+		break;
+	default:
 		//DEBUG
-		printf("Unknown opcode. %d\n", tlmsg->header.opcode);
+		printf("Unknown channel or opcode. %d/%d\n", tl_chan, tl_opcode);
 		exit(1);
 	}
 
-out:
-}
-#if 0
-void tl_handler(TileLinkMsg *tl, int *channel, int *credit) {
-	// Handling TileLink Msg
-
-	// for testing
-	*channel = 1;
-	*credit = 2;
-
-	// Send response
-	TloeFrame *tloeframe = malloc(sizeof(TloeFrame));
-	TileLinkMsg *tlmsg = malloc(sizeof(TileLinkMsg));
-	memset(tloeframe, 0, sizeof(TloeFrame));
-
-	if (tl->opcode == A_GET_OPCODE) {
-		tloeframe->mask = 1;
-		tloeframe->channel = CHANNEL_A;
-		tloeframe->credit = 2;
-		tloeframe->opcode = C_ACCESSACKDATA_OPCODE;
-
-#if 1
-		if (!enqueue(reply_buffer, tloeframe)) {
-			printf("Failed to enqueue packet %d, buffer is full.\n", tloeframe->seq_num);
-			goto out;
-		}
-#else
-		free(tloeframe);
-		goto out;
-#endif
-
-	} else if (tl->opcode == A_PUTFULLDATA_OPCODE) {
-		exit(1);
-		free(tlmsg);
-		return;
-	} else if (tl->opcode == C_ACCESSACKDATA_OPCODE) {
-		exit(1);
-		free(tlmsg);
-		return;
-	}
-out:
 	free(tlmsg);
+out:
 }
-#endif
+

@@ -88,3 +88,22 @@ void tloe_ether_close(TloeEther *ether) {
     if (ether != NULL)
         free(ether);
 }
+
+void set_tloe_ether(tloe_ether_header_t *tloeether, char *dest, char *src, unsigned short eth_type) {
+    memcpy(tloeether->dest_mac_addr, dest, 6);
+    memcpy(tloeether->src_mac_addr, src, 6);
+    tloeether->eth_type = eth_type;
+}
+
+tloe_ether_header_t get_tloe_ether() {
+    tloe_ether_header_t tloeether;
+
+    unsigned char dest_mac[6] = {0xFF, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA};
+    unsigned char src_mac[6] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+    unsigned short eth_type = 0xAAAA;
+
+    set_tloe_ether(&tloeether, (char *)dest_mac, (char *)src_mac, eth_type);
+
+    return tloeether;
+}
+

@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g
+CFLAGS = -g -mcmodel=large
 SRC_DIR = . util
 
 TEST_NORMAL_FRAME_DROP ?= 0
