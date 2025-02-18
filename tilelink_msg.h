@@ -1,5 +1,6 @@
 #ifndef __TILELINK_MSG_H__
 #define __TILELINK_MSG_H__
+#include <stdint.h>
 
 // Channel A
 #define A_PUTFULLDATA_OPCODE    0
@@ -41,6 +42,7 @@
 // Channel E
 #define E_GRANTACK              0  // Not required opcode
 
+#if 0
 // TileLink messag with Data and without Mask
 typedef struct tilelink_message_struct {
 	int channel;
@@ -51,6 +53,53 @@ typedef struct tilelink_message_struct {
     char header2[8];
     char data[0];
 } TileLinkMsg;
+#endif
+
+typedef struct tilelink_header_struct {
+    uint8_t reserved1:1;
+    uint8_t chan:3;
+    uint8_t opcode:3;
+    uint8_t reserved2:1;
+    uint8_t param:4;
+    uint8_t size:4;
+    uint8_t domain:8;
+    uint16_t reserved;
+    uint32_t source:26;
+} tl_header_t;
+
+typedef struct {
+    tl_header_t header;
+    uint64_t address;      // 채널 A, B, C에서 사용
+    uint64_t reserved1:38; // 채널 D에서 사용 (Grant)
+    uint32_t sink:26;      // 채널 D, E에서 사용
+    uint8_t data[];        // 가변 데이터 (AccessAckData, GrantData 등)
+} tl_msg_t;
+
+typedef struct tilelink_message_abc_struct {
+    tl_header_t header;
+    uint64_t address;
+    // Data
+} tl_msgABC_t;
+
+typedef struct tilelink_message_d_ack_struct {
+    tl_header_t header;
+    // Data
+} tl_msgDAck_t;
+
+typedef struct tilelink_message_d_grant_struct {
+    tl_header_t header;
+    uint64_t reserved1:38;
+    uint32_t sink:26;
+    // Data
+} tl_msgDGrant_t;
+
+typedef struct tilelink_message_e_struct {
+    uint8_t reserved1:1;
+    uint8_t chan:3;
+    uint64_t reserved2:34;
+    uint32_t sink:26;
+} tl_msgE_t;
+
 
 // TileLink message with Data and Mask (n <= 6)
 
@@ -58,6 +107,15 @@ typedef struct tilelink_message_struct {
 
 // Operations for the TileLink message
 
-int get_tlmsg_credit(TileLinkMsg *tlmsg);
+#if 0
+void tl_set_abc_msg(tl_msg_t *tlmsg, uint8_t chan, uint8_t opcode, uint8_t param, uint8_t size, uint8_t domain, uint32_t source);
+uint8_t tl_get_opcode(tl_msg_t *tlmsg);
+uint8_t tl_set_opcode(tl_msg_t *tlmsg, uint8_t opcode);
+uint8_t tl_get_channel(tl_msg_t *tlmsg);
+uint8_t tl_set_channel(tl_msg_t *tlmsg, uint8_t chan);
+uint8_t tl_get_credit(tl_msg_t *tlmsg);
+#endif
+
+int get_tlmsg_credit(tl_msg_t *tlmsg);
 
 #endif // __TILELINK_MSG_H__

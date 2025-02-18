@@ -4,6 +4,6 @@
 #include "tloe_endpoint.h"
 
 void open_conn(tloe_endpoint_t *);
-TileLinkMsg *TX(tloe_endpoint_t *, TileLinkMsg *);
+tl_msg_t *TX(tloe_endpoint_t *, tl_msg_t *);
 
 #endif // __TLOE_TRANSMITTER_H__

@@ -26,7 +26,7 @@ void open_conn(tloe_endpoint_t *e) {
 	}
 }
 
-static int enqueue_retransmit_buffer(tloe_endpoint_t *e, RetransmitBufferElement *rbe, TileLinkMsg *tlmsg) {
+static int enqueue_retransmit_buffer(tloe_endpoint_t *e, RetransmitBufferElement *rbe, tl_msg_t *tlmsg) {
 	// Update the sequence number
 	rbe->tloe_frame.seq_num = e->next_tx_seq;
 	// Set the tilelink msg
@@ -38,7 +38,7 @@ static int enqueue_retransmit_buffer(tloe_endpoint_t *e, RetransmitBufferElement
 	return enqueue(e->retransmit_buffer, rbe);
 }
 
-static void send_request_normal_tlmsg(tloe_endpoint_t *e, TileLinkMsg *tlmsg) {
+static void send_request_normal_tlmsg(tloe_endpoint_t *e, tl_msg_t *tlmsg) {
 	TloeFrame *f = (TloeFrame *)malloc(sizeof(TloeFrame));
 
 	// Update the sequence number
@@ -60,9 +60,9 @@ static void send_request_normal_tlmsg(tloe_endpoint_t *e, TileLinkMsg *tlmsg) {
 	free(f);
 }
 
-TileLinkMsg *TX(tloe_endpoint_t *e, TileLinkMsg *request_normal_tlmsg) {
+tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 	int enqueued;
-	TileLinkMsg *return_tlmsg = NULL;
+	tl_msg_t *return_tlmsg = NULL;
 	RetransmitBufferElement *rbe;
 
 	if (!is_queue_empty(e->ack_buffer)) {
@@ -106,7 +106,7 @@ TileLinkMsg *TX(tloe_endpoint_t *e, TileLinkMsg *request_normal_tlmsg) {
 		// NORMAL packet
 		// Reflect the sequence number, store in the retransmission buffer, and send
 		// Check credt for flow control
-		if (dec_credit(&(e->fc), request_normal_tlmsg->channel, 1) == 0) {
+		if (dec_credit(&(e->fc), request_normal_tlmsg->header.chan, 1) == 0) {
 			return_tlmsg = request_normal_tlmsg;
 			goto out;
 		} else {

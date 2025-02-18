@@ -8,7 +8,7 @@
 
 void tl_handler(tloe_endpoint_t *e) {
 	// dequeue from th_buffer
-	TileLinkMsg *tlmsg;
+	tl_msg_t *tlmsg;
 
 	if (is_queue_empty(e->tl_msg_buffer))
 		goto out;
@@ -18,13 +18,13 @@ void tl_handler(tloe_endpoint_t *e) {
 		goto out;
 	}
 
-	tlmsg = (TileLinkMsg *)dequeue(e->tl_msg_buffer); 
+	tlmsg = (tl_msg_t *)dequeue(e->tl_msg_buffer); 
 
 	// handle & make reponse
-	switch (tlmsg->opcode) {
+	switch (tlmsg->header.opcode) {
 	case A_GET_OPCODE:
-		tlmsg->channel = CHANNEL_D;
-		tlmsg->opcode = C_ACCESSACKDATA_OPCODE;
+		tlmsg->header.chan = CHANNEL_D;
+		tlmsg->header.opcode = C_ACCESSACKDATA_OPCODE;
 
 		if (!enqueue(e->response_buffer, tlmsg)) {
 			//printf("Failed to enqueue packet %d, buffer is full.\n", tloeframe->seq_num);
@@ -37,7 +37,7 @@ void tl_handler(tloe_endpoint_t *e) {
 		break;
 	default:	
 		//DEBUG
-		printf("Unknown opcode. %d\n", tlmsg->opcode);
+		printf("Unknown opcode. %d\n", tlmsg->header.opcode);
 		exit(1);
 	}
 

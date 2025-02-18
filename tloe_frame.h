@@ -26,7 +26,7 @@ typedef struct tloe_frame_struct {
 	int channel;
 	int credit;
 
-	TileLinkMsg tlmsg;
+	tl_msg_t tlmsg;
 } TloeFrame;
 
 typedef struct tloe_buffer_struct {

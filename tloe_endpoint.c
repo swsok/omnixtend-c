@@ -88,14 +88,14 @@ int is_conn(tloe_endpoint_t *e) {
 
 // Select data to process from buffers based on priority order  
 // ack_buffer -> response_buffer -> message_buffer
-TileLinkMsg *select_buffer(tloe_endpoint_t *e) {
-	TileLinkMsg *tlmsg = NULL;
+tl_msg_t *select_buffer(tloe_endpoint_t *e) {
+	tl_msg_t *tlmsg = NULL;
 
-	tlmsg = (TileLinkMsg *) dequeue(e->response_buffer);
+	tlmsg = (tl_msg_t *) dequeue(e->response_buffer);
 	if (tlmsg) 
 		goto out;
 
-	tlmsg = (TileLinkMsg *) dequeue(e->message_buffer);
+	tlmsg = (tl_msg_t *) dequeue(e->message_buffer);
 out:
 	return tlmsg;
 	// TODO free(tlmsg);
@@ -104,8 +104,8 @@ out:
 void *tloe_endpoint(void *arg) {
 	tloe_endpoint_t *e = (tloe_endpoint_t *)arg;
 
-	TileLinkMsg *request_tlmsg = NULL;
-	TileLinkMsg *not_transmitted_tlmsg = NULL;
+	tl_msg_t *request_tlmsg = NULL;
+	tl_msg_t *not_transmitted_tlmsg = NULL;
 
 	while(!e->is_done) {
 		if (!request_tlmsg)
@@ -182,10 +182,10 @@ int main(int argc, char *argv[]) {
 		} else if (input == 'a') {
 			if (!is_conn(e)) continue;
 			for (int i = 0; i < iter; i++) {
-				TileLinkMsg *new_tlmsg = (TileLinkMsg *)malloc(sizeof(TileLinkMsg));
-				new_tlmsg->channel = CHANNEL_A;
-				new_tlmsg->opcode = A_GET_OPCODE;
-				new_tlmsg->num_flit = 4;
+				tl_msg_t *new_tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));
+				new_tlmsg->header.chan = CHANNEL_A;
+				new_tlmsg->header.opcode = A_GET_OPCODE;
+				// TODO new_tlmsg->num_flit = 4;
 				if (!new_tlmsg) {
 					printf("Memory allocation failed at packet %d!\n", i);
 					continue;

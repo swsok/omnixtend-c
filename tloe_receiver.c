@@ -109,7 +109,7 @@ static void serve_normal_request(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) 
 	// printf("RX: Send pakcet to Tx channel for replying ACK/NAK with seq_num: %d, seq_num_ack: %d, ack: %d\n",
 	//    tloeframe->seq_num, tloeframe->seq_num_ack, tloeframe->ack);
 	// Handle TileLink Msg
-	TileLinkMsg *tlmsg = (TileLinkMsg *)malloc(sizeof(TileLinkMsg));
+	tl_msg_t *tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));
 	*tlmsg = recv_tloeframe->tlmsg;
 
 	// if tlmsg_buffer is full, send NAK 
@@ -133,7 +133,7 @@ static void serve_normal_request(tloe_endpoint_t *e, TloeFrame *recv_tloeframe) 
 		// Update sequence numbers
 		e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->seq_num);
 		e->acked_seq = recv_tloeframe->seq_num_ack;
-		e->timeout_rx.last_channel = recv_tloeframe->tlmsg.channel;
+		e->timeout_rx.last_channel = recv_tloeframe->tlmsg.header.chan;
 		e->timeout_rx.last_credit = get_tlmsg_credit(&(recv_tloeframe->tlmsg));		//TODO
 
 		if (!enqueue(e->tl_msg_buffer, (void *) tlmsg)) { 
