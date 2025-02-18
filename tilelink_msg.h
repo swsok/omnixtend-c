@@ -2,6 +2,14 @@
 #define __TILELINK_MSG_H__
 #include <stdint.h>
 
+#define CHANNEL_NUM     6
+#define CHANNEL_0       0
+#define CHANNEL_A       1
+#define CHANNEL_B       2
+#define CHANNEL_C       3
+#define CHANNEL_D       4
+#define CHANNEL_E       5
+
 // Channel A
 #define A_PUTFULLDATA_OPCODE    0
 #define A_PUTPARTIALDATA_OPCODE 1

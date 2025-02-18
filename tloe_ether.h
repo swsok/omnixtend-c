@@ -12,6 +12,12 @@ typedef struct tloe_ether_struct {
     mqd_t mq_rx;
 } TloeEther;
 
+typedef struct tloe_ether_ {
+    unsigned char dest_mac_addr[6];
+    unsigned char src_mac_addr[6];
+    unsigned short eth_type;
+} tloe_ether_header_t;
+
 size_t tloe_ether_send(TloeEther *eth, char *data, size_t size);
 size_t tloe_ether_recv(TloeEther *eth, char *data);
 TloeEther *tloe_ether_alloc_and_init(void);

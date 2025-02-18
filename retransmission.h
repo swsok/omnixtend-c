@@ -19,7 +19,7 @@
 typedef struct {
     int state;
     time_t send_time;
-    TloeFrame tloe_frame;
+    tloe_frame_t tloe_frame;
 } RetransmitBufferElement;
 
 int retransmit(tloe_endpoint_t *, int);

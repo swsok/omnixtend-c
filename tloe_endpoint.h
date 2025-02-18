@@ -84,8 +84,8 @@ static inline int tloe_seqnum_next(int seq_num) {
 	return (seq_num + 1) & MAX_SEQ_NUM;
 }
 
-static inline tloe_rx_req_type_t tloe_rx_get_req_type(tloe_endpoint_t *e, TloeFrame *f) {
-	int diff_seq = tloe_seqnum_cmp(f->seq_num, e->next_rx_seq);
+static inline tloe_rx_req_type_t tloe_rx_get_req_type(tloe_endpoint_t *e, tloe_frame_t *f) {
+	int diff_seq = tloe_seqnum_cmp(f->header.seq_num, e->next_rx_seq);
 	if (diff_seq == 0)
 		return REQ_NORMAL;
 	else if (diff_seq < 0)

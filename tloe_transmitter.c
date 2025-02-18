@@ -12,15 +12,15 @@ void open_conn(tloe_endpoint_t *e) {
 	TloeEther *ether = e->ether;
 
 	for (int i = 1; i < CHANNEL_NUM; i++) {
-		TloeFrame tloeframe;
+		tloe_frame_t tloeframe;
 	
-		tloeframe.seq_num = e->next_tx_seq;
-		tloeframe.seq_num_ack = e->acked_seq;
-		tloeframe.conn = 1;
-		tloeframe.channel = i;
-		tloeframe.credit = CREDIT_DEFAULT;
-		tloeframe.mask = 0;
-		tloe_ether_send(ether, (char *)&tloeframe, sizeof(TloeFrame));
+		tloeframe.header.seq_num = e->next_tx_seq;
+		tloeframe.header.seq_num_ack = e->acked_seq;
+		tloeframe.header.type = 2;
+		tloeframe.header.chan = i;
+		tloeframe.header.credit = CREDIT_DEFAULT;
+		tloe_set_mask(&tloeframe, 0);
+		tloe_ether_send(ether, (char *)&tloeframe, sizeof(tloe_frame_t));
 
 		e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
 	}
@@ -28,9 +28,9 @@ void open_conn(tloe_endpoint_t *e) {
 
 static int enqueue_retransmit_buffer(tloe_endpoint_t *e, RetransmitBufferElement *rbe, tl_msg_t *tlmsg) {
 	// Update the sequence number
-	rbe->tloe_frame.seq_num = e->next_tx_seq;
+	rbe->tloe_frame.header.seq_num = e->next_tx_seq;
 	// Set the tilelink msg
-	rbe->tloe_frame.tlmsg = *tlmsg;
+	tloe_set_tlmsg(&(rbe->tloe_frame), tlmsg, 0);
 	// Set the state to TLOE_INIT
 	rbe->state = TLOE_INIT;
 	// Get the current time
@@ -39,24 +39,24 @@ static int enqueue_retransmit_buffer(tloe_endpoint_t *e, RetransmitBufferElement
 }
 
 static void send_request_normal_tlmsg(tloe_endpoint_t *e, tl_msg_t *tlmsg) {
-	TloeFrame *f = (TloeFrame *)malloc(sizeof(TloeFrame));
+	tloe_frame_t *f = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
 
 	// Update the sequence number
-	f->seq_num = e->next_tx_seq;
+	f->header.seq_num = e->next_tx_seq;
 	// Update the sequence number of the ack
-	f->seq_num_ack = e->acked_seq;
+	f->header.seq_num_ack = e->acked_seq;
 	// Set the ack to TLOE_ACK
-	f->ack = TLOE_ACK;
+	f->header.ack = TLOE_ACK;
 	// Set the mask to indicate normal packet
-	f->mask = 1;
+	tloe_set_mask(f, 1);
 	// Set the tilelink msg
-	f->tlmsg = *tlmsg;
+	tloe_set_tlmsg(f, tlmsg, 0);
 	// Set 0 to channel and credit
-	f->channel = 0;
-	f->credit = 0;
+	f->header.chan = 0;
+	f->header.credit = 0;
 	// Send the request_normal_frame using the ether
-	tloe_ether_send(e->ether, (char *)f, sizeof(TloeFrame));
-	// Free TloeFrame
+	tloe_ether_send(e->ether, (char *)f, sizeof(tloe_frame_t));
+	// Free tloe_frame_t
 	free(f);
 }
 
@@ -66,10 +66,10 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 	RetransmitBufferElement *rbe;
 
 	if (!is_queue_empty(e->ack_buffer)) {
-		TloeFrame *ack_frame;
+		tloe_frame_t *ack_frame;
 
 //		return_tlmsg = request_normal_tlmsg;
-		ack_frame = (TloeFrame *)dequeue(e->ack_buffer);
+		ack_frame = (tloe_frame_t *)dequeue(e->ack_buffer);
 
 #ifdef TEST_TIMEOUT_DROP // (Test) Delayed ACK: Drop a certain number of ACK packets
 		if (e->master == 0) {  // in case of slave
@@ -92,8 +92,8 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 #endif
 		// ACK/NAK packet (zero-TileLink)
 		// Reflect the sequence number but do not store in the retransmission buffer, just send
-		ack_frame->seq_num = e->next_tx_seq;
-		tloe_ether_send(e->ether, (char *)ack_frame, sizeof(TloeFrame));
+		ack_frame->header.seq_num = e->next_tx_seq;
+		tloe_ether_send(e->ether, (char *)ack_frame, sizeof(tloe_frame_t));
 
 		// ack_frame must be freed because of the dequeue
 		//free(ack_frame);
@@ -142,8 +142,8 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 
 	// Retransmit all the elements in the retransmit buffer if the timeout has occurred
 	if ((rbe = getfront(e->retransmit_buffer)) && is_timeout_tx(&(e->iteration_ts), rbe->send_time)) {
-		fprintf(stderr, "TX: Timeout TX and retranmission from seq_num: %d\n", rbe->tloe_frame.seq_num);
-		retransmit(e, rbe->tloe_frame.seq_num);
+		fprintf(stderr, "TX: Timeout TX and retranmission from seq_num: %d\n", rbe->tloe_frame.header.seq_num);
+		retransmit(e, rbe->tloe_frame.header.seq_num);
 	}
 out:
 	return return_tlmsg;
