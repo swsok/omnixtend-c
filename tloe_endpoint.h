@@ -6,8 +6,9 @@
 #include "flowcontrol.h"
 #include "util/circular_queue.h"
 
-#define MAX_SEQ_NUM     ((1<<10)-1)
+#define MAX_SEQ_NUM      ((1<<22)-1)
 #define HALF_MAX_SEQ_NUM ((MAX_SEQ_NUM + 1)/2)
+#define MAX_BUFFER_SIZE  1500
 
 typedef struct tloe_endpoint_struct {
 	TloeEther *ether;
@@ -31,7 +32,7 @@ typedef struct tloe_endpoint_struct {
 
 	int next_tx_seq;
 	int next_rx_seq;
-	int acked_seq;
+	uint32_t acked_seq;
 	int acked;
 
 	int ack_cnt;

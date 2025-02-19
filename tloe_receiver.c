@@ -9,55 +9,58 @@
 #include "timeout.h"
 
 static void serve_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
-	// Set credits
-	set_credit(&(e->fc), recv_tloeframe->header.chan, recv_tloeframe->header.credit);
+    char send_buffer[MAX_BUFFER_SIZE];
+    // Set credits
+    set_credit(&(e->fc), recv_tloeframe->header.chan, recv_tloeframe->header.credit);
 
-	// If slave, send chan/credit message
-	if (e->master == 0) {
-		tloe_frame_t *f = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
+    // If slave, send chan/credit message
+    if (e->master == 0) {
+        tloe_frame_t *f = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
 
-		// Set Open Connection
-		f->header.type = 2;
-		// Update the sequence number
-		f->header.seq_num = e->next_tx_seq;
-		// Update the sequence number of the ack
-		f->header.seq_num_ack = e->acked_seq;
-		// Set the ack to TLOE_ACK
-		f->header.ack = TLOE_ACK;
-		// Set the mask to indicate normal packet
-		tloe_set_mask(f, 0);
-		// Set 0 to channel and credit
-		f->header.chan = recv_tloeframe->header.chan;
-		f->header.credit = CREDIT_DEFAULT;
-		// Send the request_normal_frame using the ether
-		tloe_ether_send(e->ether, (char *)f, sizeof(tloe_frame_t));
-		// increase the sequence number of the endpoint
-		e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
-		// Free tloe_frame_t 
-		free(f);
+        // Set Open Connection
+        f->header.type = 2;
+        // Update the sequence number
+        f->header.seq_num = e->next_tx_seq;
+        // Update the sequence number of the ack
+        f->header.seq_num_ack = e->acked_seq;
+        // Set the ack to TLOE_ACK
+        f->header.ack = TLOE_ACK;
+        // Set the mask to indicate normal packet
+        tloe_set_mask(f, 0);
+        // Set 0 to channel and credit
+        f->header.chan = recv_tloeframe->header.chan;
+        f->header.credit = CREDIT_DEFAULT;
+        // Convert tloe_frame into packet
+        tloe_frame_to_packet((tloe_frame_t *)f, send_buffer, sizeof(tloe_frame_t));
+        // Send the request_normal_frame using the ether
+        tloe_ether_send(e->ether, (char *)send_buffer, sizeof(tloe_frame_t));
+        // increase the sequence number of the endpoint
+        e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
+        // Free tloe_frame_t 
+        free(f);
 
-		init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
+        init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
 
-		// Check whether all channel/credit received
-		if (e->connection == 0) {
-			int check_con = 0;
-			for (int i=1; i < CHANNEL_NUM; i++) {
-				if (get_credit(&(e->fc), i) <= 128)
-					check_con = 1;
-			}
+        // Check whether all channel/credit received
+        if (e->connection == 0) {
+            int check_con = 0;
+            for (int i=1; i < CHANNEL_NUM; i++) {
+                if (get_credit(&(e->fc), i) <= 128)
+                    check_con = 1;
+            }
 
-			if (!check_con) {
-				printf("Open connection is done. Credit %d | %d | %d | %d | %d\n",
-						get_credit(&(e->fc), CHANNEL_A), get_credit(&(e->fc), CHANNEL_B),
-						get_credit(&(e->fc), CHANNEL_C), get_credit(&(e->fc), CHANNEL_D),
-						get_credit(&(e->fc), CHANNEL_E));
-				e->connection = 1;
-			}
-		}
-	}
-	// Update sequence numbers
-	e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->header.seq_num);
-	e->acked_seq = recv_tloeframe->header.seq_num_ack;
+            if (!check_con) {
+                printf("Open connection is done. Credit %d | %d | %d | %d | %d\n",
+                        get_credit(&(e->fc), CHANNEL_A), get_credit(&(e->fc), CHANNEL_B),
+                        get_credit(&(e->fc), CHANNEL_C), get_credit(&(e->fc), CHANNEL_D),
+                        get_credit(&(e->fc), CHANNEL_E));
+                e->connection = 1;
+            }
+        }
+    }
+    // Update sequence numbers
+    e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->header.seq_num);
+    e->acked_seq = recv_tloeframe->header.seq_num_ack;
 }
 
 static void serve_ack(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
@@ -194,6 +197,7 @@ void RX(tloe_endpoint_t *e) {
 	int size;
 	chan_credit_t chan_credit;
 	tloe_rx_req_type_t req_type;
+	char recv_buffer[MAX_BUFFER_SIZE];
 	tloe_frame_t *recv_tloeframe = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
 	if (!recv_tloeframe) {
 		fprintf(stderr, "%s[%d] failed to allocate memory for recv_tloeframe\n", __FILE__, __LINE__);
@@ -201,11 +205,15 @@ void RX(tloe_endpoint_t *e) {
 	}
 
 	// Receive a frame from the Ethernet layer
-	size = tloe_ether_recv(e->ether, (char *)recv_tloeframe);
-	if (size == 0) {
+	//size = tloe_ether_recv(e->ether, (char *)recv_tloeframe, sizeof(recv_tloeframe));
+	size = tloe_ether_recv(e->ether, (char *)recv_buffer, sizeof(recv_buffer));
+	if (size < 0) {
 		free(recv_tloeframe);
 		goto process_ack;
 	}
+
+    // Convert packet into tloe_frame
+	packet_to_tloe_frame(recv_buffer, size, recv_tloeframe);
 
 	// Connection/Disconnection 
 	if (is_conn_msg(recv_tloeframe)) {

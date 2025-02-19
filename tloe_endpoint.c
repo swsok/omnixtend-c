@@ -136,18 +136,15 @@ int main(int argc, char *argv[]) {
 	int master_slave = 0; 
 	int iter = 0;
 
-	if (argc < 3) {
-		printf("Usage: tloe_endpoint queue_name master[1]/slave[0]\n");
-		exit(0);
+	if (argc < 4) {
+		printf("Usage: tloe_endpoint eth-if dest_mac master[1]/slave[0]\n");
+		exit(EXIT_FAILURE);
 	}
 
 	srand(time(NULL));
 
-	master_slave = atoi(argv[2]);
-	if (master_slave == 1)
-		ether = tloe_ether_open(argv[1], 1);
-	else
-		ether = tloe_ether_open(argv[1], 0);
+	master_slave = atoi(argv[3]);
+	ether = tloe_ether_open(argv[1], argv[2]);
 
 	e = (tloe_endpoint_t *)malloc(sizeof(tloe_endpoint_t));
 

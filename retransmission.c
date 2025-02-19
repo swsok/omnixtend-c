@@ -3,28 +3,31 @@
 #include "tloe_common.h"
 
 int retransmit(tloe_endpoint_t *e, int seq_num) {
-	TloeEther *ether = e->ether;
-	CircularQueue *retransmit_buffer = e->retransmit_buffer;
-	tloe_frame_t frame;
-	int i, n;
-	// retransmit 
-	n = 0;
-	for (i=retransmit_buffer->front; i != retransmit_buffer->rear; i = (i + 1) % retransmit_buffer->size) {
-		RetransmitBufferElement *element = (RetransmitBufferElement *) retransmit_buffer->data[i];
-		int diff = tloe_seqnum_cmp(element->tloe_frame.header.seq_num, seq_num);
-		if (diff < 0)
-			continue;
+    TloeEther *ether = e->ether;
+    CircularQueue *retransmit_buffer = e->retransmit_buffer;
+    tloe_frame_t frame;
+    int i, n;
+    char send_buffer[MAX_BUFFER_SIZE];
+    // retransmit 
+    n = 0;
+    for (i=retransmit_buffer->front; i != retransmit_buffer->rear; i = (i + 1) % retransmit_buffer->size) {
+        RetransmitBufferElement *element = (RetransmitBufferElement *) retransmit_buffer->data[i];
+        int diff = tloe_seqnum_cmp(element->tloe_frame.header.seq_num, seq_num);
+        if (diff < 0)
+            continue;
 
-		frame = element->tloe_frame;
-		tloe_set_mask(&frame, 1);		// Indicate to normal packet
+        frame = element->tloe_frame;
+        tloe_set_mask(&frame, 1);		// Indicate to normal packet
 
-		fprintf(stderr, "Retransmission with num_seq: %d\n", frame.header.seq_num);
-		tloe_ether_send(ether, (char *)&frame, sizeof(tloe_frame_t));
+        fprintf(stderr, "Retransmission with num_seq: %d\n", frame.header.seq_num);
+        // Convert tloe_frame into packet
+        tloe_frame_to_packet((tloe_frame_t *)&frame, send_buffer, sizeof(tloe_frame_t));
+        tloe_ether_send(ether, send_buffer, sizeof(tloe_frame_t));
 
-		element->state = TLOE_RESENT;
-		element->send_time = get_current_timestamp(&(e->iteration_ts));
-	}
-	return n;
+        element->state = TLOE_RESENT;
+        element->send_time = get_current_timestamp(&(e->iteration_ts));
+    }
+    return n;
 }
 
 void slide_window(tloe_endpoint_t *e, int last_seq_num) {
