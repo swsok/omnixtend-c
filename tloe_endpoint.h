@@ -6,7 +6,7 @@
 #include "flowcontrol.h"
 #include "util/circular_queue.h"
 
-#define MAX_SEQ_NUM      ((1<<22)-1)
+#define MAX_SEQ_NUM      ((uint32_t)(1<<22)-1)
 #define HALF_MAX_SEQ_NUM ((MAX_SEQ_NUM + 1)/2)
 #define MAX_BUFFER_SIZE  1500
 
@@ -59,8 +59,8 @@ typedef enum {
 	REQ_OOS,
 } tloe_rx_req_type_t;
 
-static inline int tloe_seqnum_cmp(int a, int b) {
-    int diff = a - b;  // 두 값의 차이 계산
+static inline int tloe_seqnum_cmp(uint32_t a, uint32_t b) {
+    int diff = (int)a - (int)b;  // 두 값의 차이 계산
 
     if (diff == 0) {
         return 0;  // 두 값이 동일
@@ -74,14 +74,14 @@ static inline int tloe_seqnum_cmp(int a, int b) {
     }
 }
 
-static inline int tloe_seqnum_prev(int seq_num) {
-	int t = seq_num - 1;
+static inline uint32_t tloe_seqnum_prev(uint32_t seq_num) {
+	int t = (int)seq_num - 1;
 	if (t < 0) 
 		t = MAX_SEQ_NUM;
-	return t;
+	return (uint32_t)t;
 }
 
-static inline int tloe_seqnum_next(int seq_num) {
+static inline uint32_t tloe_seqnum_next(uint32_t seq_num) {
 	return (seq_num + 1) & MAX_SEQ_NUM;
 }
 

@@ -83,7 +83,7 @@ static void serve_ack(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
 	}
 }
 
-static void serve_oos_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, int seq_num) {
+static void serve_oos_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, uint32_t seq_num) {
 	int enqueued;
 	// The received TLoE frame is out of sequence, indicating that some frames were lost
 	// The frame should be dropped, NEXT_RX_SEQ is not updated
