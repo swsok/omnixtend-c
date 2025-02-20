@@ -3,7 +3,8 @@
 
 #include "tilelink_msg.h"
 
-//void tl_handler(TileLinkMsg *tl, int *channel, int *credit);
+int tl_handler_init();
+void tl_handler_close();
 void tl_handler();
 
 #endif // __TILELINK_HANDLER_H__

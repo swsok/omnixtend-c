@@ -20,7 +20,7 @@
 #include "util/circular_queue.h"
 #include "util/util.h"
 
-static void init_tloe_endpoint(tloe_endpoint_t *e, int fabric_type, int master_slave) {
+static void tloe_endpoint_init(tloe_endpoint_t *e, int fabric_type, int master_slave) {
 	e->is_done = 0;
 	e->connection = 0;
 	e->master = master_slave;
@@ -58,12 +58,15 @@ static void init_tloe_endpoint(tloe_endpoint_t *e, int fabric_type, int master_s
 	e->drop_response_cnt = 0;
 }
 
-static void close_tloe_endpoint(tloe_endpoint_t *e) {
+static void tloe_endpoint_close(tloe_endpoint_t *e) {
     // Join threads
     pthread_join(e->tloe_endpoint_thread, NULL);
 
     // Cleanup
     tloe_fabric_close(e);
+
+    // Cleanup
+    tl_handler_close();
 
     // Cleanup queues
     delete_queue(e->message_buffer);
@@ -156,9 +159,11 @@ int main(int argc, char *argv[]) {
 
 	srand(time(NULL));
 
+    // Initialize
 	e = (tloe_endpoint_t *)malloc(sizeof(tloe_endpoint_t));
-	init_tloe_endpoint(e, fabric_type, master_slave);
+	tloe_endpoint_init(e, fabric_type, master_slave);
 	tloe_fabric_init(e, fabric_type);
+    tl_handler_init();
 
 	// intead of a direct call to tloe_ether_open
 	tloe_fabric_open(e, dev_name, ip_addr);
@@ -231,7 +236,7 @@ int main(int argc, char *argv[]) {
 		} else if (input == 'd') {
 			// Disconnection
 			printf("disconnection not implemented yet\n");
-			init_tloe_endpoint(e, fabric_type, master_slave);
+			tloe_endpoint_init(e, fabric_type, master_slave);
 		} else if (input == 'q') {
 			e->is_done = 1;
 			printf("Exiting...\n");
@@ -241,7 +246,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	close_tloe_endpoint(e);
+	tloe_endpoint_close(e);
 
 	return 0;
 }

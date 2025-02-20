@@ -8,7 +8,34 @@
 
 #define MEM_SIZE  (4ULL * 1024 * 1024 * 1024)     // 8GB
 
-char mem_storage[MEM_SIZE];
+char *mem_storage = NULL;
+
+int tl_handler_init() {
+    int result = -1;
+    if (mem_storage != NULL) {
+        fprintf(stderr, "Memory is already initialized.\n");
+        goto out;
+    }
+
+    mem_storage = (char *)malloc(MEM_SIZE);
+    if (mem_storage == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        goto out;
+    }
+
+    memset(mem_storage, 0, MEM_SIZE);
+out:
+    return 0;
+}
+
+void tl_handler_close() {
+    if (mem_storage != NULL) {
+        free(mem_storage);
+        mem_storage = NULL;
+    } else {
+        fprintf(stderr, "Memory is already freed or not initialized.\n");
+    }
+}
 
 void handle_A_PUTFULLDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
     // Write data to memory
