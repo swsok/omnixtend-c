@@ -20,7 +20,7 @@
 #include "util/circular_queue.h"
 #include "util/util.h"
 
-void init_tloe_endpoint(tloe_endpoint_t *e, TloeEther *ether, int master_slave) {
+static void init_tloe_endpoint(tloe_endpoint_t *e, int fabric_type, int master_slave) {
 	e->is_done = 0;
 	e->connection = 0;
 	e->master = master_slave;
@@ -36,8 +36,6 @@ void init_tloe_endpoint(tloe_endpoint_t *e, TloeEther *ether, int master_slave) 
 	e->ack_buffer = create_queue(100);
 	e->tl_msg_buffer = create_queue(100);
 	e->response_buffer = create_queue(100);
-
-	e->ether = ether;
 
 	init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
 	init_flowcontrol(&(e->fc));
@@ -60,12 +58,12 @@ void init_tloe_endpoint(tloe_endpoint_t *e, TloeEther *ether, int master_slave) 
 	e->drop_response_cnt = 0;
 }
 
-void close_tloe_endpoint(tloe_endpoint_t *e) {
+static void close_tloe_endpoint(tloe_endpoint_t *e) {
     // Join threads
     pthread_join(e->tloe_endpoint_thread, NULL);
 
     // Cleanup
-    tloe_ether_close(e->ether);
+    tloe_fabric_close(e);
 
     // Cleanup queues
     delete_queue(e->message_buffer);
@@ -76,7 +74,7 @@ void close_tloe_endpoint(tloe_endpoint_t *e) {
 	delete_queue(e->response_buffer);
 }
 
-int is_conn(tloe_endpoint_t *e) {
+static int is_conn(tloe_endpoint_t *e) {
 	int result = 0;
 	if (e->connection == 0)
 		printf("Initiate the connection first.\n");
@@ -88,7 +86,7 @@ int is_conn(tloe_endpoint_t *e) {
 
 // Select data to process from buffers based on priority order  
 // ack_buffer -> response_buffer -> message_buffer
-tl_msg_t *select_buffer(tloe_endpoint_t *e) {
+static tl_msg_t *select_buffer(tloe_endpoint_t *e) {
 	tl_msg_t *tlmsg = NULL;
 
 	tlmsg = (tl_msg_t *) dequeue(e->response_buffer);
@@ -135,20 +133,35 @@ int main(int argc, char *argv[]) {
 	char input, input_count[32];
 	int master_slave = 0; 
 	int iter = 0;
+	char dev_name[64];
+	char ip_addr[64];
+	int fabric_type = TLOE_FABRIC_ETHER;
 
 	if (argc < 4) {
 		printf("Usage: tloe_endpoint eth-if dest_mac master[1]/slave[0]\n");
 		exit(EXIT_FAILURE);
 	}
 
+	strncpy(dev_name, argv[1], 64);
+	master_slave = atoi(argv[3]);
+	switch (fabric_type) {
+		case TLOE_FABRIC_ETHER:
+			strncpy(ip_addr, argv[2], 64);
+			break;
+		case TLOE_FABRIC_MQ:
+			strncpy(ip_addr, master_slave ? "-a" : "-b", sizeof("-a"));
+		default:
+			break;
+	}
+
 	srand(time(NULL));
 
-	master_slave = atoi(argv[3]);
-	ether = tloe_ether_open(argv[1], argv[2]);
-
 	e = (tloe_endpoint_t *)malloc(sizeof(tloe_endpoint_t));
+	init_tloe_endpoint(e, fabric_type, master_slave);
+	tloe_fabric_init(e, fabric_type);
 
-	init_tloe_endpoint(e, ether, master_slave);
+	// intead of a direct call to tloe_ether_open
+	tloe_fabric_open(e, dev_name, ip_addr);
 
 	if (pthread_create(&(e->tloe_endpoint_thread), NULL, tloe_endpoint, e) != 0) {
         error_exit("Failed to create tloe endpoint thread");
@@ -217,7 +230,8 @@ int main(int argc, char *argv[]) {
 			}
 		} else if (input == 'd') {
 			// Disconnection
-			init_tloe_endpoint(e, ether, master_slave);
+			printf("disconnection not implemented yet\n");
+			init_tloe_endpoint(e, fabric_type, master_slave);
 		} else if (input == 'q') {
 			e->is_done = 1;
 			printf("Exiting...\n");
@@ -225,7 +239,6 @@ int main(int argc, char *argv[]) {
 		} else {
 			if (!is_conn(e)) continue;
 		}
-
 	}
 
 	close_tloe_endpoint(e);

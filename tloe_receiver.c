@@ -33,7 +33,8 @@ static void serve_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
         // Convert tloe_frame into packet
         tloe_frame_to_packet((tloe_frame_t *)f, send_buffer, sizeof(tloe_frame_t));
         // Send the request_normal_frame using the ether
-        tloe_ether_send(e->ether, (char *)send_buffer, sizeof(tloe_frame_t));
+	tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
+
         // increase the sequence number of the endpoint
         e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
         // Free tloe_frame_t 
@@ -209,8 +210,7 @@ void RX(tloe_endpoint_t *e) {
 	}
 
 	// Receive a frame from the Ethernet layer
-	//size = tloe_ether_recv(e->ether, (char *)recv_tloeframe, sizeof(recv_tloeframe));
-	size = tloe_ether_recv(e->ether, (char *)recv_buffer, sizeof(recv_buffer));
+	size = tloe_fabric_recv(e, recv_buffer, sizeof(recv_buffer));
 	if (size < 0) {
 		free(recv_tloeframe);
 		goto process_ack;

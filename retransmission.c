@@ -3,7 +3,7 @@
 #include "tloe_common.h"
 
 int retransmit(tloe_endpoint_t *e, int seq_num) {
-    TloeEther *ether = e->ether;
+    TloeEther *ether = (TloeEther *)e->fabric_ops.handle;
     CircularQueue *retransmit_buffer = e->retransmit_buffer;
     tloe_frame_t frame;
     int i, n;
@@ -22,7 +22,7 @@ int retransmit(tloe_endpoint_t *e, int seq_num) {
         fprintf(stderr, "Retransmission with num_seq: %d\n", frame.header.seq_num);
         // Convert tloe_frame into packet
         tloe_frame_to_packet((tloe_frame_t *)&frame, send_buffer, sizeof(tloe_frame_t));
-        tloe_ether_send(ether, send_buffer, sizeof(tloe_frame_t));
+	tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
 
         element->state = TLOE_RESENT;
         element->send_time = get_current_timestamp(&(e->iteration_ts));
@@ -31,7 +31,7 @@ int retransmit(tloe_endpoint_t *e, int seq_num) {
 }
 
 void slide_window(tloe_endpoint_t *e, int last_seq_num) {
-	TloeEther *ether = e->ether;
+    TloeEther *ether = (TloeEther *)e->fabric_ops.handle;
 	CircularQueue *retransmit_buffer = e->retransmit_buffer;
     RetransmitBufferElement *rbe;
 	tl_msg_t tlmsg;

@@ -1,5 +1,8 @@
 #ifndef __TLOE_ENDPOINT_H__
 #define __TLOE_ENDPOINT_H__
+
+#include <stdint.h>
+#include "tloe_fabric.h"
 #include "tloe_ether.h"
 #include "tloe_frame.h"
 #include "timeout.h"
@@ -11,7 +14,8 @@
 #define MAX_BUFFER_SIZE  1500
 
 typedef struct tloe_endpoint_struct {
-	TloeEther *ether;
+	tloe_fabric_ops_t fabric_ops; // Current media operations in use
+
 	CircularQueue *retransmit_buffer;
 	CircularQueue *rx_buffer;
 	CircularQueue *message_buffer;

@@ -9,7 +9,7 @@
 #include "timeout.h"
 
 void open_conn(tloe_endpoint_t *e) {
-    TloeEther *ether = e->ether;
+    TloeEther *ether = (TloeEther *)e->fabric_ops.handle;
     char send_buffer[MAX_BUFFER_SIZE];
 
     for (int i = 1; i < CHANNEL_NUM; i++) {
@@ -24,8 +24,7 @@ void open_conn(tloe_endpoint_t *e) {
         tloe_set_mask(&tloeframe, 0);
         // Convert tloe_frame into packet
         tloe_frame_to_packet(&tloeframe, send_buffer, sizeof(tloe_frame_t));
-        //tloe_ether_send(ether, (char *)&tloeframe, sizeof(tloe_frame_t));
-        tloe_ether_send(ether, send_buffer, sizeof(tloe_frame_t));
+	tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
 
         e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
     }
@@ -64,7 +63,7 @@ static void send_request_normal_tlmsg(tloe_endpoint_t *e, tl_msg_t *tlmsg) {
     // Convert tloe_frame into packet
     tloe_frame_to_packet((tloe_frame_t *)f, send_buffer, sizeof(tloe_frame_t));
     // Send the request_normal_frame using the ether
-    tloe_ether_send(e->ether, send_buffer, sizeof(tloe_frame_t));
+    tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
 
     // Free tloe_frame_t
     free(f);
@@ -107,7 +106,7 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 
         // Convert tloe_frame into packet
         tloe_frame_to_packet(ack_frame, send_buffer, sizeof(tloe_frame_t)); 
-        tloe_ether_send(e->ether, send_buffer, sizeof(tloe_frame_t));
+	tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
 
         // ack_frame must be freed because of the dequeue
         free(ack_frame);
