@@ -108,8 +108,9 @@ static void serve_oos_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, 
 	e->oos_cnt++;
 }
 
-static void serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
+static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
 	int is_nak = 0;
+	int preserve_recv_tloeframe = 0; 
 	// printf("RX: Send pakcet to Tx channel for replying ACK/NAK with seq_num: %d, seq_num_ack: %d, ack: %d\n",
 	//    tloeframe->header.seq_num, tloeframe->header.seq_num_ack, tloeframe->header.ack);
 	// Handle TileLink Msg
@@ -120,6 +121,7 @@ static void serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloefram
 	// else send ACK
 	if (is_queue_full(e->tl_msg_buffer)) {
 		is_nak = 1;
+		preserve_recv_tloeframe = 1;
 		serve_oos_request(e, recv_tloeframe, tloe_seqnum_prev(recv_tloeframe->header.seq_num));
 		printf("tl_msg_buffer is full. Send NAK. seq_num: %d\n", recv_tloeframe->header.seq_num);
 		e->drop_tlmsg_cnt++;
@@ -148,6 +150,8 @@ static void serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloefram
 		e->timeout_rx.ack_cnt++;
 		e->delay_cnt++;
 	}
+
+	return preserve_recv_tloeframe;
 }
 
 static void serve_duplicate_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
@@ -284,8 +288,8 @@ void RX(tloe_endpoint_t *e) {
 			// Normal request packet
 			// Handle and enqueue it into the message buffer
 			// Handle normal request packet
-			serve_normal_request(e, recv_tloeframe);
-			free(recv_tloeframe);
+			if (serve_normal_request(e, recv_tloeframe) == 0)
+				free(recv_tloeframe);
 			// if (next_tx_seq % 100 == 0)
 			// fprintf(stderr, "next_tx: %d, ackd: %d, next_rx: %d, ack_cnt: %d\n",
 			//     next_tx_seq, acked_seq, next_rx_seq, ack_cnt);

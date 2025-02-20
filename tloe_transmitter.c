@@ -110,7 +110,7 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
         tloe_ether_send(e->ether, send_buffer, sizeof(tloe_frame_t));
 
         // ack_frame must be freed because of the dequeue
-        //free(ack_frame);
+        free(ack_frame);
 	} 
 	if (request_normal_tlmsg && !is_queue_full(e->retransmit_buffer)) {
 		// NORMAL packet
