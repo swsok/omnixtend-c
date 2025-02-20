@@ -88,7 +88,7 @@ static void serve_oos_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, 
 	// The received TLoE frame is out of sequence, indicating that some frames were lost
 	// The frame should be dropped, NEXT_RX_SEQ is not updated
 	// A negative acknowledgment (NACK) is sent using the last properly received sequence number
-	int last_proper_rx_seq = seq_num == -1 ? tloe_seqnum_prev(e->next_rx_seq) : seq_num;
+	uint32_t last_proper_rx_seq = seq_num;
 
 	fprintf(stderr, "TLoE frame is out of sequence with "
 			"seq_num: %d, next_rx_seq: %d, last: %d\n",
@@ -300,7 +300,7 @@ void RX(tloe_endpoint_t *e) {
 			break;
 		case REQ_OOS:
 			// recv_tloeframe is not freed here because of the enqueue
-			serve_oos_request(e, recv_tloeframe, -1);
+			serve_oos_request(e, recv_tloeframe, tloe_seqnum_prev(e->next_rx_seq));
 			break;
 	}
 
