@@ -6,7 +6,7 @@
 #include "tloe_ether.h"
 #include "tloe_common.h"
 
-int tloe_mac_str2bytes(const char *mac_str, uint8_t mac_bytes[6]) {
+static int tloe_mac_str2bytes(const char *mac_str, uint8_t mac_bytes[6]) {
     if (sscanf(mac_str, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
                 &mac_bytes[0], &mac_bytes[1], &mac_bytes[2],
                 &mac_bytes[3], &mac_bytes[4], &mac_bytes[5]) != 6) {
@@ -92,7 +92,7 @@ out:
     return copy_size;
 }
 
-TloeEther *tloe_ether_alloc_and_init(uint8_t dest_mac[ETHER_ADDR_LEN], uint8_t src_mac[ETHER_ADDR_LEN]) {
+static TloeEther *tloe_ether_alloc_and_init(uint8_t dest_mac[ETHER_ADDR_LEN], uint8_t src_mac[ETHER_ADDR_LEN]) {
     TloeEther *ether;
 
     ether = (TloeEther *) malloc(sizeof(TloeEther));
@@ -187,7 +187,7 @@ void tloe_ether_close(TloeEther *ether) {
         free(ether);
 }
 
-void tloe_print_ethhdr(struct ether_header *eh) {
+static void tloe_print_ethhdr(struct ether_header *eh) {
     printf("DEST_MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
             eh->ether_dhost[0],
             eh->ether_dhost[1],
@@ -205,13 +205,13 @@ void tloe_print_ethhdr(struct ether_header *eh) {
     printf("Ethertpye: %04X\n", ntohs(eh->ether_type));
 }
 
-void set_tloe_ether(tloe_ether_header_t *tloeether, char *dest, char *src, unsigned short eth_type) {
+static void set_tloe_ether(tloe_ether_header_t *tloeether, char *dest, char *src, unsigned short eth_type) {
     memcpy(tloeether->dest_mac_addr, dest, 6);
     memcpy(tloeether->src_mac_addr, src, 6);
     tloeether->eth_type = eth_type;
 }
 
-tloe_ether_header_t get_tloe_ether() {
+static tloe_ether_header_t get_tloe_ether(void) {
     tloe_ether_header_t tloeether;
 
     unsigned char dest_mac[6] = {0xFF, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA};
@@ -223,7 +223,7 @@ tloe_ether_header_t get_tloe_ether() {
     return tloeether;
 }
 
-void print_payload(char *data, int size) {
+static void print_payload(char *data, int size) {
     int i, j;
 
     printf("\n");

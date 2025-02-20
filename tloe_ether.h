@@ -29,12 +29,7 @@ typedef struct tloe_ether_ {
 
 size_t tloe_ether_send(TloeEther *, char *, size_t);
 size_t tloe_ether_recv(TloeEther *, char *, size_t);
-TloeEther *tloe_ether_alloc_and_init(uint8_t *, uint8_t *);
 TloeEther *tloe_ether_open(char *, char *);
 void tloe_ether_close(TloeEther *);
-void set_tloe_ether(tloe_ether_header_t *, char *, char *, unsigned short);
-void tloe_print_ethhdr(struct ether_header *eh);
-tloe_ether_header_t get_tloe_ether();
-void print_payload(char *, int);
 
 #endif // __TLOE_ETHER_H__
