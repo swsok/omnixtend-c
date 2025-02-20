@@ -233,23 +233,16 @@ void RX(tloe_endpoint_t *e) {
 	}
 
 #ifdef TEST_TIMEOUT_DROP // (Test) Delayed ACK: Drop a certain number of normal packets
-	if (e->master == 0) {  // in case of slave
-		static int dack;
-		if (dack == 0) {
-			if ((rand() % 1000) < 1) {
-				dack = 1;
-				e->drop_npacket_size = 4;
-			}
-		}
-
-		if (e->drop_npacket_size-- > 0) {
-			//printf("Drop normal packet of seq_num %d\n", recv_tloeframe->seq_num);
-			e->drop_npacket_cnt++;
-			free(recv_tloeframe);
-			if (e->drop_npacket_size == 0) dack = 0;
-			goto process_ack;
-		}
-	}
+    if (e->master == 0) {
+        if (e->drop_npacket_size == 0 && ((rand() % 1000) == 0))
+            e->drop_npacket_size = 4;
+        if (e->drop_npacket_size > 0) {
+            e->drop_npacket_cnt++;
+            e->drop_npacket_size--;
+            free(recv_tloeframe);
+            goto process_ack;
+        }
+    }
 #endif
 	
 	// printf("RX: Received packet with seq_num: %d, seq_num_ack: %d, ack: %d\n",

@@ -82,23 +82,16 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
         ack_frame = (tloe_frame_t *)dequeue(e->ack_buffer);
 
 #ifdef TEST_TIMEOUT_DROP // (Test) Delayed ACK: Drop a certain number of ACK packets
-        if (e->master == 0) {  // in case of slave
-            static int dack;
-            if (dack == 0) {
-                if ((rand() % 1000) < 1) {
-                    dack == 1;
-                    e->drop_apacket_size = 4;
-                }
-            }
-
-            if (e->drop_apacket_size-- > 0) {
-                //printf("Drop ack packet of seq_num %d\n", recv_tloeframe->seq_num);
-                e->drop_apacket_cnt++;
-                if (e->drop_npacket_size == 0) dack = 0;
-                free(ack_frame);
-                goto out;
-            }
+     if (e->master == 0) {
+        if (e->drop_apacket_size == 0 && ((rand() % 1000) == 0))
+            e->drop_apacket_size = 4;
+        if (e->drop_apacket_size > 0) {
+            e->drop_apacket_cnt++;
+            e->drop_apacket_size--;
+            free(ack_frame);
+            goto out;
         }
+    }   
 #endif
         // ACK/NAK packet (zero-TileLink)
         // Reflect the sequence number but do not store in the retransmission buffer, just send
@@ -106,7 +99,7 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 
         // Convert tloe_frame into packet
         tloe_frame_to_packet(ack_frame, send_buffer, sizeof(tloe_frame_t)); 
-	tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
+	    tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
 
         // ack_frame must be freed because of the dequeue
         free(ack_frame);
