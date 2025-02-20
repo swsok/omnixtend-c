@@ -123,7 +123,7 @@ static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe
 		is_nak = 1;
 		preserve_recv_tloeframe = 1;
 		serve_oos_request(e, recv_tloeframe, tloe_seqnum_prev(recv_tloeframe->header.seq_num));
-		printf("tl_msg_buffer is full. Send NAK. seq_num: %d\n", recv_tloeframe->header.seq_num);
+		fprintf(stderr, "tl_msg_buffer is full. Send NAK. seq_num: %d\n", recv_tloeframe->header.seq_num);
 		e->drop_tlmsg_cnt++;
 	} else {
 		// Delayed ACK

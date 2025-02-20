@@ -22,7 +22,7 @@ void handle_A_PUTFULLDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
 	tlmsg->header.opcode = D_ACCESSACK_OPCODE;
 
     if (!enqueue(e->response_buffer, tlmsg)) {
-		printf("Failed to enqueue packet, buffer is full.\n");
+		fprintf(stderr, "Failed to enqueue packet, buffer is full.\n");
 		e->drop_response_cnt++;
 		free(tlmsg);
     }
@@ -40,7 +40,7 @@ void handle_A_GET_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
 	tlmsg->header.opcode = D_ACCESSACKDATA_OPCODE;
 
 	if (!enqueue(e->response_buffer, tlmsg)) {
-		printf("Failed to enqueue packet, buffer is full.\n");
+		fprintf(stderr, "Failed to enqueue packet, buffer is full.\n");
 		e->drop_response_cnt++;
 		free(data);
 		free(tlmsg);
