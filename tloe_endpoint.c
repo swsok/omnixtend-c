@@ -7,6 +7,7 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <getopt.h>
 
 #include "tloe_endpoint.h"
 #include "tloe_ether.h"
@@ -19,6 +20,15 @@
 #include "timeout.h"
 #include "util/circular_queue.h"
 #include "util/util.h"
+
+#define CHECK_FABRIC_TYPE_CONFLICT(current_type, expected_type, msg) do { \
+    if (current_type != -1 && current_type != expected_type) { \
+        fprintf(stdout, "Error: %s\n", msg); \
+        print_usage(); \
+        ret = -1; \
+        goto out; \
+    } \
+} while(0)
 
 static void tloe_endpoint_init(tloe_endpoint_t *e, int fabric_type, int master_slave) {
 	e->is_done = 0;
@@ -225,66 +235,137 @@ out:
     return ret;
 }
 
+static void print_usage(void) {
+    fprintf(stdout, "Usage: tloe_endpoint {-i<ethernet interface> -d<destination mac address> | -p<mq name>} {-m | -s}\n");
+}
+
+static int parse_arguments(int argc, char *argv[], int *fabric_type, int *master, 
+                         char *optarg_a, size_t optarg_a_size,
+                         char *optarg_b, size_t optarg_b_size) {
+    int opt;
+    int ret = 0;
+    *fabric_type = -1;
+    *master = -1;
+
+    while ((opt = getopt(argc, argv, "i:d:p:ms")) != -1) {
+        switch (opt) {
+            case 'i':
+                CHECK_FABRIC_TYPE_CONFLICT(*fabric_type, TLOE_FABRIC_ETHER, 
+                    "Cannot mix ethernet and mq mode options");
+                *fabric_type = TLOE_FABRIC_ETHER;
+                strncpy(optarg_a, optarg, optarg_a_size - 1);
+                optarg_a[optarg_a_size - 1] = '\0';
+                break;
+            case 'd':
+                CHECK_FABRIC_TYPE_CONFLICT(*fabric_type, TLOE_FABRIC_ETHER,
+                    "Cannot mix ethernet and mq mode options");
+                *fabric_type = TLOE_FABRIC_ETHER;
+                strncpy(optarg_b, optarg, optarg_b_size - 1);
+                optarg_b[optarg_b_size - 1] = '\0';
+                break;
+            case 'p':
+                CHECK_FABRIC_TYPE_CONFLICT(*fabric_type, TLOE_FABRIC_MQ,
+                    "Cannot mix ethernet and mq mode options");
+                *fabric_type = TLOE_FABRIC_MQ;
+                strncpy(optarg_a, optarg, optarg_a_size - 1);
+                optarg_a[optarg_a_size - 1] = '\0';
+                break;
+            case 'm':
+                *master = 1;
+                break;
+            case 's':
+                *master = 0;
+                break;
+            default:
+                print_usage();
+                ret = -1;
+                goto out;
+        }
+    }
+
+    // fabric type must be specified
+    if (*fabric_type == -1) {
+        fprintf(stdout, "Error: Must specify either ethernet mode (-i, -d) or mq mode (-p)\n");
+        print_usage();
+        ret = -1;
+        goto out;
+    }
+
+    // ethernet mode requires both interface and destination MAC	
+    if (*fabric_type == TLOE_FABRIC_ETHER && (optarg_a[0] == '\0' || optarg_b[0] == '\0')) {
+        fprintf(stdout, "Error: Ethernet mode requires both interface (-i) and destination MAC (-d)\n");
+        print_usage();
+        ret = -1;
+        goto out;
+    }
+
+    // master or slave mode must be specified
+    if (*master == -1) {
+        fprintf(stdout, "Error: Must specify either master (-m) or slave (-s) mode\n");
+        print_usage();
+        ret = -1;
+        goto out;
+    }
+
+    if (*fabric_type == TLOE_FABRIC_MQ) {
+        strncpy(optarg_b, *master ? "-master" : "-slave", sizeof("-master"));
+    }
+
+out:
+    return ret;
+}
+
 int main(int argc, char *argv[]) {
-	tloe_endpoint_t *e;
-	TloeEther *ether;
-	char input, input_count[32];
-	int master_slave = 0; 
-	int iter = 0;
-	char dev_name[64];
-	char ip_addr[64];
-	int fabric_type = TLOE_FABRIC_ETHER;
+    tloe_endpoint_t *e;
+    TloeEther *ether;
+    char input, input_count[32];
+    int master_slave;
+    int iter = 0;
+    char dev_name[64] = {0};
+    char dest_mac_addr[64] = {0};
+    int fabric_type;
 
-	if (argc < 4) {
-		printf("Usage: tloe_endpoint eth-if dest_mac master[1]/slave[0]\n");
-		exit(EXIT_FAILURE);
-	}
-
-	strncpy(dev_name, argv[1], 64);
-	master_slave = atoi(argv[3]);
-	switch (fabric_type) {
-		case TLOE_FABRIC_ETHER:
-			strncpy(ip_addr, argv[2], 64);
-			break;
-		case TLOE_FABRIC_MQ:
-			strncpy(ip_addr, master_slave ? "-a" : "-b", sizeof("-a"));
-		default:
-			break;
-	}
+    if (parse_arguments(argc, argv, &fabric_type, &master_slave, 
+                       dev_name, sizeof(dev_name),
+                       dest_mac_addr, sizeof(dest_mac_addr)) < 0) {
+        exit(EXIT_FAILURE);
+    }
 
 #if defined(DEBUG) || defined(TEST_NORMAL_FRAME_DROP) || defined(TEST_TIMEOUT_DROP)
-	srand(time(NULL));
+    srand(time(NULL));
 #endif
 
-    // Initialize
-	e = (tloe_endpoint_t *)malloc(sizeof(tloe_endpoint_t));
-	tloe_endpoint_init(e, fabric_type, master_slave);
-	tloe_fabric_init(e, fabric_type);
+    // initialization independent of tloe_endpoint
     tl_handler_init();
 
-	// intead of a direct call to tloe_ether_open
-	tloe_fabric_open(e, dev_name, ip_addr);
+    // Initialize tloe_endpoint
+    e = (tloe_endpoint_t *)malloc(sizeof(tloe_endpoint_t));
+    tloe_endpoint_init(e, fabric_type, master_slave);
+    tloe_fabric_init(e, fabric_type);
 
-	if (pthread_create(&(e->tloe_endpoint_thread), NULL, tloe_endpoint, e) != 0) {
+    // intead of a direct call to tloe_ether_open
+    tloe_fabric_open(e, dev_name, dest_mac_addr);
+
+    if (pthread_create(&(e->tloe_endpoint_thread), NULL, tloe_endpoint, e) != 0) {
         error_exit("Failed to create tloe endpoint thread");
     }
 
-	while(!(e->is_done)) {
-		printf("Enter 'c' to open, 'd' to close, 's' to status, 'a' to send, 'q' to quit:\n");
-		printf("> ");
-		fgets(input_count, sizeof(input_count), stdin);
+    while(!(e->is_done)) {
+        printf("Enter 'c' to open, 'd' to close, 's' to status, 'a' to send, 'q' to quit:\n");
+        printf("> ");
+        fgets(input_count, sizeof(input_count), stdin);
 
-		if (sscanf(input_count, " %c %d", &input, &iter) < 1) {
-			printf("Invalid input! Try again.\n");
-			continue;
-		}
+        if (sscanf(input_count, " %c %d", &input, &iter) < 1) {
+            printf("Invalid input! Try again.\n");
+            continue;
+        }
 
-		if (handle_user_input(e, input, iter, fabric_type, master_slave))
-			break;
-	}
+        if (handle_user_input(e, input, iter, fabric_type, master_slave))
+            break;
+    }
 
-	tloe_endpoint_close(e);
+    tloe_endpoint_close(e);
 
-	return 0;
+    return 0;
 }
 
