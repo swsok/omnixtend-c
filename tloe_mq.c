@@ -13,15 +13,10 @@ size_t tloe_mq_send(TloeMQ *eth, char *data, size_t size) {
     return ret;
 }
 
-size_t tloe_mq_recv(TloeMQ *eth, char *data, size_t data_size) {
+size_t tloe_mq_recv(TloeMQ *eth, char *data, size_t size) {
     int ret;
-    size_t size = data_size;
 
-    if (size > TLOE_MQ_MSG_SIZE)
-        size = TLOE_MQ_MSG_SIZE;
-    ret = mq_receive(eth->mq_rx, data, size, NULL);
-    if (ret == -1 && errno == EAGAIN) 
-		return 0;
+    ret = mq_receive(eth->mq_rx, data, TLOE_MQ_MSG_SIZE, NULL);
 
     return ret;
 }
@@ -52,7 +47,7 @@ TloeMQ *tloe_mq_open(char *queue_name, char *master) {
 
     // Create message queue
     strcpy(queue_name_trx, queue_name);
-    if (strncmp(master, "master", sizeof("master"))) // if master
+    if (strncmp(master, "-master", sizeof("-master")) == 0) // if master
         strcat(queue_name_trx, "-a");
     else
         strcat(queue_name_trx, "-b");
@@ -65,7 +60,7 @@ TloeMQ *tloe_mq_open(char *queue_name, char *master) {
     }
 
     strcpy(queue_name_trx, queue_name);
-    if (strncmp(master, "slave", sizeof("slave"))) // if slave
+    if (strncmp(master, "-master", sizeof("-master")) == 0) // if master
         strcat(queue_name_trx, "-b");
     else
         strcat(queue_name_trx, "-a");
