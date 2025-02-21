@@ -14,15 +14,20 @@ void set_credit(flowcontrol_t *fc, int channel, int credit) {
     fc->credits[channel] = (1 << credit);
 }
 
+int is_filled_credit(flowcontrol_t *fc, int channel) {
+    return fc->credits[channel] > (1 << CREDIT_INIT);
+}
+
 int check_all_channels(flowcontrol_t *fc) {
     int result = 1;
-    printf("Wait until all channels have their credits set.....\n");
+    int credit_init = (1 << CREDIT_INIT);
 
-    while(!(fc->credits[CHANNEL_A] && \
-        fc->credits[CHANNEL_B] && \
-        fc->credits[CHANNEL_C] && \
-        fc->credits[CHANNEL_D] && \
-        fc->credits[CHANNEL_E])){
+    if ((fc->credits[CHANNEL_A] > credit_init) && \
+        (fc->credits[CHANNEL_B] > credit_init) && \
+        (fc->credits[CHANNEL_C] > credit_init) && \
+        (fc->credits[CHANNEL_D] > credit_init) && \
+        (fc->credits[CHANNEL_E] > credit_init)) {
+        result = 0;
     }
 
     return result;

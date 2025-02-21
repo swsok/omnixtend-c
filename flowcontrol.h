@@ -14,6 +14,7 @@ typedef struct {
 
 void init_flowcontrol(flowcontrol_t *); 
 void set_credit(flowcontrol_t *, int, int);
+int is_filled_credit(flowcontrol_t *, int);
 int check_all_channels(flowcontrol_t *);
 void inc_credit(flowcontrol_t *, int, int);
 int dec_credit(flowcontrol_t *, int, int);

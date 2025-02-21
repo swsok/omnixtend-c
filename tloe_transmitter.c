@@ -8,28 +8,6 @@
 #include "retransmission.h"
 #include "timeout.h"
 
-void open_conn(tloe_endpoint_t *e) {
-    TloeEther *ether = (TloeEther *)e->fabric_ops.handle;
-    char send_buffer[MAX_BUFFER_SIZE];
-
-    for (int i = 1; i < CHANNEL_NUM; i++) {
-        tloe_frame_t tloeframe;
-        memset(&tloeframe, 0, sizeof(tloeframe));
-
-        tloeframe.header.seq_num = e->next_tx_seq;
-        tloeframe.header.seq_num_ack = e->acked_seq;
-        tloeframe.header.type = 2;
-        tloeframe.header.chan = i;
-        tloeframe.header.credit = CREDIT_DEFAULT;
-        tloe_set_mask(&tloeframe, 0);
-        // Convert tloe_frame into packet
-        tloe_frame_to_packet(&tloeframe, send_buffer, sizeof(tloe_frame_t));
-	tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
-
-        e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
-    }
-}
-
 static int enqueue_retransmit_buffer(tloe_endpoint_t *e, RetransmitBufferElement *rbe, tl_msg_t *tlmsg) {
 	// Update the sequence number
 	rbe->tloe_frame.header.seq_num = e->next_tx_seq;

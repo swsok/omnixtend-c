@@ -13,6 +13,7 @@
 #include "tloe_frame.h"
 #include "tloe_transmitter.h"
 #include "tloe_receiver.h"
+#include "tloe_connection.h"
 #include "tilelink_msg.h"
 #include "tilelink_handler.h"
 #include "retransmission.h"
@@ -24,17 +25,25 @@ static void tloe_endpoint_init(tloe_endpoint_t *e, int fabric_type, int master_s
 	e->is_done = 0;
 	e->connection = 0;
 	e->master = master_slave;
+    e->fabric_type = fabric_type;
 
 	e->next_tx_seq = 0;
 	e->next_rx_seq = 0;
 	e->acked_seq = MAX_SEQ_NUM;
 	e->acked = 0;
 
+    if (e->retransmit_buffer != NULL) delete_queue(e->retransmit_buffer);
+    if (e->rx_buffer != NULL) delete_queue(e->rx_buffer);
+	if (e->message_buffer != NULL) delete_queue(e->message_buffer);
+	if (e->ack_buffer != NULL) delete_queue(e->ack_buffer);
+	if (e->tl_msg_buffer != NULL) delete_queue(e->tl_msg_buffer);
+	if (e->response_buffer != NULL) delete_queue(e->response_buffer);
+
     e->retransmit_buffer = create_queue(WINDOW_SIZE + 1);
     e->rx_buffer = create_queue(10); // credits
 	e->message_buffer = create_queue(10000);
 	e->ack_buffer = create_queue(100);
-	e->tl_msg_buffer = create_queue(100);
+	e->tl_msg_buffer = create_queue(10000);
 	e->response_buffer = create_queue(100);
 
 	init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
@@ -56,6 +65,8 @@ static void tloe_endpoint_init(tloe_endpoint_t *e, int fabric_type, int master_s
 
 	e->drop_tlmsg_cnt = 0;
 	e->drop_response_cnt = 0;
+
+    e->close_flag = 0;
 }
 
 static void tloe_endpoint_close(tloe_endpoint_t *e) {
@@ -77,16 +88,6 @@ static void tloe_endpoint_close(tloe_endpoint_t *e) {
 	delete_queue(e->response_buffer);
 }
 
-static int is_conn(tloe_endpoint_t *e) {
-	int result = 0;
-	if (e->connection == 0)
-		printf("Initiate the connection first.\n");
-	else
-		result = 1;
-
-	return result;
-}
-
 // Select data to process from buffers based on priority order  
 // ack_buffer -> response_buffer -> message_buffer
 static tl_msg_t *select_buffer(tloe_endpoint_t *e) {
@@ -99,7 +100,6 @@ static tl_msg_t *select_buffer(tloe_endpoint_t *e) {
 	tlmsg = (tl_msg_t *) dequeue(e->message_buffer);
 out:
 	return tlmsg;
-	// TODO free(tlmsg);
 }
 
 void *tloe_endpoint(void *arg) {
@@ -108,7 +108,10 @@ void *tloe_endpoint(void *arg) {
 	tl_msg_t *request_tlmsg = NULL;
 	tl_msg_t *not_transmitted_tlmsg = NULL;
 
+
 	while(!e->is_done) {
+        while(!e->connection) continue;
+
 		if (!request_tlmsg)
 			request_tlmsg = select_buffer(e);
 
@@ -165,14 +168,14 @@ int main(int argc, char *argv[]) {
 	tloe_fabric_init(e, fabric_type);
     tl_handler_init();
 
-	// intead of a direct call to tloe_ether_open
+	// instead of a direct call to tloe_ether_open
 	tloe_fabric_open(e, dev_name, ip_addr);
 
 	if (pthread_create(&(e->tloe_endpoint_thread), NULL, tloe_endpoint, e) != 0) {
         error_exit("Failed to create tloe endpoint thread");
     }
 
-	while(!(e->is_done)) {
+    while(!(e->is_done)) {
 		printf("Enter 'c' to open, 'd' to close, 's' to status, 'a' to send, 'q' to quit:\n");
 		printf("> ");
 		fgets(input_count, sizeof(input_count), stdin);
@@ -218,33 +221,23 @@ int main(int argc, char *argv[]) {
 					break;  // Stop if buffer is full
 				}
 			}
-		} else if (input == 'c') {
-			// Connection
-			if (!e->master) {
-				printf("The connection should be initiated by the master.\n");
-				continue;
-			}
-
-			open_conn(e);
-			if (check_all_channels(&(e->fc))) {
-				printf("Open connection is done. Credit %d | %d | %d | %d | %d\n",
-					get_credit(&(e->fc), CHANNEL_A), get_credit(&(e->fc), CHANNEL_B),
-					get_credit(&(e->fc), CHANNEL_C), get_credit(&(e->fc), CHANNEL_D),
-					get_credit(&(e->fc), CHANNEL_E));
-				e->connection = 1;
-			}
-		} else if (input == 'd') {
-			// Disconnection
-			printf("disconnection not implemented yet\n");
-			tloe_endpoint_init(e, fabric_type, master_slave);
-		} else if (input == 'q') {
-			e->is_done = 1;
-			printf("Exiting...\n");
-			break;
-		} else {
-			if (!is_conn(e)) continue;
-		}
-	}
+        } else if (input == 'c') {
+            (e->master == TYPE_MASTER) ? open_conn_master(e) : 
+                (e->master == TYPE_SLAVE ? open_conn_slave(e) : (void)0);
+            printf("Open connection complete.\n");
+        } else if (input == 'd') {
+            (e->master == TYPE_MASTER) ? close_conn_master(e) : 
+                (e->master == TYPE_SLAVE ? close_conn_slave(e) : (void)0);
+            printf("Close connection complete.\n");
+            tloe_endpoint_init(e, fabric_type, master_slave);
+        } else if (input == 'q') {
+            e->is_done = 1;
+            printf("Exiting...\n");
+            break;
+        } else {
+            if (!is_conn(e)) continue;
+        }
+    }
 
 	tloe_endpoint_close(e);
 

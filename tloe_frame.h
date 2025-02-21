@@ -3,9 +3,12 @@
 #include "tloe_ether.h"
 #include "tilelink_msg.h"
 
-#define TLOE_NAK        0
-#define TLOE_ACK        1
-#define MAX_SIZE_FLIT   65
+#define TLOE_NAK              0
+#define TLOE_ACK              1
+#define TYPE_ACKONLY          1
+#define TYPE_OPEN_CONNECTION  2
+#define TYPE_CLOSE_CONNECTION 3
+#define MAX_SIZE_FLIT         65
 
 typedef struct __attribute__((packed,aligned(8))) {
     unsigned char credit:5;

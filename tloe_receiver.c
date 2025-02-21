@@ -5,64 +5,9 @@
 #include "tloe_frame.h"
 #include "tloe_endpoint.h"
 #include "tloe_common.h"
+#include "tloe_connection.h"
 #include "retransmission.h"
 #include "timeout.h"
-
-static void serve_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
-    char send_buffer[MAX_BUFFER_SIZE];
-    // Set credits
-    set_credit(&(e->fc), recv_tloeframe->header.chan, recv_tloeframe->header.credit);
-
-    // If slave, send chan/credit message
-    if (e->master == 0) {
-        tloe_frame_t *f = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
-
-        // Set Open Connection
-        f->header.type = 2;
-        // Update the sequence number
-        f->header.seq_num = e->next_tx_seq;
-        // Update the sequence number of the ack
-        f->header.seq_num_ack = e->acked_seq;
-        // Set the ack to TLOE_ACK
-        f->header.ack = TLOE_ACK;
-        // Set the mask to indicate normal packet
-        tloe_set_mask(f, 0);
-        // Set 0 to channel and credit
-        f->header.chan = recv_tloeframe->header.chan;
-        f->header.credit = CREDIT_DEFAULT;
-        // Convert tloe_frame into packet
-        tloe_frame_to_packet((tloe_frame_t *)f, send_buffer, sizeof(tloe_frame_t));
-        // Send the request_normal_frame using the ether
-	tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
-
-        // increase the sequence number of the endpoint
-        e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
-        // Free tloe_frame_t 
-        free(f);
-
-        init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
-
-        // Check whether all channel/credit received
-        if (e->connection == 0) {
-            int check_con = 0;
-            for (int i=1; i < CHANNEL_NUM; i++) {
-                if (get_credit(&(e->fc), i) <= 128)
-                    check_con = 1;
-            }
-
-            if (!check_con) {
-                printf("Open connection is done. Credit %d | %d | %d | %d | %d\n",
-                        get_credit(&(e->fc), CHANNEL_A), get_credit(&(e->fc), CHANNEL_B),
-                        get_credit(&(e->fc), CHANNEL_C), get_credit(&(e->fc), CHANNEL_D),
-                        get_credit(&(e->fc), CHANNEL_E));
-                e->connection = 1;
-            }
-        }
-    }
-    // Update sequence numbers
-    e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->header.seq_num);
-    e->acked_seq = recv_tloeframe->header.seq_num_ack;
-}
 
 static void serve_ack(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
 	// Slide retransmission buffer for flushing ancester frames
@@ -218,11 +163,6 @@ void RX(tloe_endpoint_t *e) {
 
     // Convert packet into tloe_frame
 	packet_to_tloe_frame(recv_buffer, size, recv_tloeframe);
-
-	// Connection/Disconnection 
-	if (is_conn_msg(recv_tloeframe)) {
-		serve_conn(e, recv_tloeframe);
-	}	
 
 	// ACK/NAK (zero-TileLink)
 	if (is_ack_msg(recv_tloeframe)) {

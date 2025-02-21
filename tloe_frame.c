@@ -61,7 +61,7 @@ int is_ack_msg(tloe_frame_t *frame) {
 }
 
 int is_conn_msg(tloe_frame_t *frame) {
-	return (frame->header.type == 2);
+    return (frame->header.type == 2 || frame->header.type == 3) ? frame->header.type : -1;
 }
 
 void tloe_frame_to_packet(tloe_frame_t *tloeframe, char *send_buffer, int send_buffer_size) {
