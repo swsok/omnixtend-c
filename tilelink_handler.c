@@ -37,6 +37,9 @@ void tl_handler_close() {
     }
 }
 
+// Function prototype for handler functions
+typedef void (*tl_handler_fn)(tloe_endpoint_t *e, tl_msg_t *tl);
+
 void handle_A_PUTFULLDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
     // Write data to memory
     int data_size = 1 << (tl->header.size);
@@ -76,169 +79,104 @@ void handle_A_GET_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
     free(data);
 }
 
+static void handle_null_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
+}
+
+static void handle_debug_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
+    printf("DEBUG: Unimplemented handler called - Channel: %d, Opcode: %d\n", 
+           tl->header.chan, tl->header.opcode);
+}
+
+// Handler table declaration
+tl_handler_fn tl_handler_table[CHANNEL_NUM][TL_OPCODE_NUM] = {
+	// Channel 0
+    {
+        handle_debug_opcode,
+        handle_debug_opcode,
+        handle_debug_opcode,
+        handle_debug_opcode,
+        handle_debug_opcode,
+        handle_debug_opcode,
+        handle_debug_opcode,
+        handle_debug_opcode,
+    },
+	// Channel A
+    {
+        handle_A_PUTFULLDATA_opcode,  // A_PUTFULLDATA
+        handle_debug_opcode,          // A_PUTPARTIALDATA
+        handle_debug_opcode,          // A_ARITHMETICDATA
+        handle_debug_opcode,          // A_LOGICALDATA
+        handle_A_GET_opcode,          // A_GET
+        handle_debug_opcode,          // A_INTENT
+        handle_debug_opcode,          // NOT USED
+        handle_debug_opcode,          // NOT USED
+    },
+	// Channel B
+    {
+        handle_debug_opcode,          // B_PUTFULLDATA
+        handle_debug_opcode,          // B_PUTPARTIALDATA
+        handle_debug_opcode,          // B_ARITHMETICDATA
+        handle_debug_opcode,          // B_LOGICALDATA
+        handle_debug_opcode,          // B_GET
+        handle_debug_opcode,          // B_INTENT
+        handle_debug_opcode,          // B_PROBEBLOCK
+        handle_debug_opcode,          // B_PROBEPERM
+    },
+	// Channel C
+    {
+        handle_debug_opcode,          // C_ACCESSACK
+        handle_debug_opcode,          // C_ACCESSACKDATA
+        handle_debug_opcode,          // C_HINTACK
+        handle_debug_opcode,          // C_PROBEACK
+        handle_debug_opcode,          // C_PROBEACKDATA
+        handle_debug_opcode,          // C_RELEASE
+        handle_debug_opcode,          // C_RELEASEDATA
+        handle_debug_opcode,          // NOT USED
+    },
+	// Channel D
+    {
+        handle_debug_opcode,          // D_ACCESSACK
+        handle_null_opcode,           // D_ACCESSACKDATA
+        handle_debug_opcode,          // D_HINTACK
+        handle_debug_opcode,          // D_GRANT
+        handle_debug_opcode,          // D_GRANTDATA
+        handle_debug_opcode,          // D_RELEASEACK
+        handle_debug_opcode,          // NOT USED
+        handle_debug_opcode,          // NOT USED
+    },
+	// Channel E
+    {
+        handle_debug_opcode,          // E_GRANTACK
+        handle_debug_opcode,          // NOT USED
+        handle_debug_opcode,          // NOT USED
+        handle_debug_opcode,          // NOT USED
+        handle_debug_opcode,          // NOT USED
+        handle_debug_opcode,          // NOT USED
+        handle_debug_opcode,          // NOT USED
+        handle_debug_opcode,          // NOT USED
+    },
+};
+
 void tl_handler(tloe_endpoint_t *e) {
-    // Handling TileLink Msg
-    tl_msg_t *tlmsg;
+    tl_msg_t *tlmsg = NULL;
+    uint8_t tl_chan;
+    uint8_t tl_opcode;
 
-	if (is_queue_empty(e->tl_msg_buffer))
-		goto out;
+    // Skip processing if TileLink message buffer is empty or response buffer is full
+    if (is_queue_empty(e->tl_msg_buffer) || is_queue_full(e->response_buffer))
+        goto out;
 
-	if (is_queue_full(e->response_buffer)) {
-		//printf("%s reply buffer is full.\n", __func__);
-		goto out;
-	}
+    // Get next message from the message buffer
+    tlmsg = (tl_msg_t *)dequeue(e->tl_msg_buffer); 
 
-	tlmsg = (tl_msg_t *)dequeue(e->tl_msg_buffer); 
+    // Extract channel and opcode information from message header
+    tl_chan = tlmsg->header.chan;
+    tl_opcode = tlmsg->header.opcode;
 
-    uint8_t tl_chan = tlmsg->header.chan;
-    uint8_t tl_opcode = tlmsg->header.opcode;
+    // Process message by calling the appropriate handler function based on channel and opcode
+    tl_handler_table[tl_chan][tl_opcode](e, tlmsg);
 
-	switch (tl_chan) {
-	case CHANNEL_A:
-		switch (tl_opcode) {
-		case A_PUTFULLDATA_OPCODE:
-            // return AccessAck
-            handle_A_PUTFULLDATA_opcode(e, tlmsg);
-			break;
-		case A_PUTPARTIALDATA_OPCODE:
-            // return AccessAck
-            // to-be implemented
-			break;
-		case A_ARITHMETICDATA_OPCODE:
-            // return AccessAckData
-            // to-be implemented
-			break;
-		case A_LOGICALDATA_OPCODE:
-            // return AccessAckData
-            // to-be implemented
-			break;
-		case A_GET_OPCODE:
-            // return AccessAckData
-            handle_A_GET_opcode(e, tlmsg);
-			break;
-		case A_INTENT_OPCODE:
-            // return HintAck
-            // to-be implemented
-			break;
-		case A_ACQUIREBLOCK_OPCODE:
-            // return Grant or GrantData
-            // to-be implemented
-			break;
-		case A_ACQUIREPERM_OPCODE:
-            // return Grant
-            // to-be implemented
-			break;
-		}
-		break;
-	case CHANNEL_B:
-		switch (tl_opcode) {
-		case B_PUTFULLDATA_OPCODE:
-            // return AccessAck
-            // to-be implemented
-			break;
-		case B_PUTPARTIALDATA_OPCODE:
-            // return AccessAck
-            // to-be implemented
-			break;
-		case B_ARITHMETICDATA_OPCODE:
-            // return AccessAckData
-            // to-be implemented
-			break;
-		case B_LOGICALDATA_OPCODE:
-            // return AccessAckData
-            // to-be implemented
-			break;
-		case B_GET_OPCODE:
-            // return AccessAckData
-            // to-be implemented
-			break;
-		case B_INTENT_OPCODE:
-            // return HintAck
-            // to-be implemented
-			break;
-		case B_PROBEBLOCK_OPCODE:
-            // return ProbeAck or ProbeAckData
-            // to-be implemented
-			break;
-		case B_PROBEPERM_OPCODE:
-            // return ProbeAck
-            // to-be implemented
-			break;
-		}
-		break;
-	case CHANNEL_C:
-		switch (tl_opcode) {
-		case C_ACCESSACK_OPCODE:
-            // return
-			break;
-		case C_ACCESSACKDATA_OPCODE:
-            // return
-			break;
-		case C_HINTACK_OPCODE:
-            // return
-            // to-be implemented
-			break;
-		case C_PROBEACK_OPCODE:
-            // return
-            // to-be implemented
-			break;
-		case C_PROBEACKDATA_OPCODE:
-            // return
-            // to-be implemented
-			break;
-		case C_RELEASE_OPCODE:
-            // return ReleaseAck
-            // to-be implemented
-			break;
-		case C_RELEASEDATA_OPCODE:
-            // return ReleaseAck
-            // to-be implemented
-			break;
-		}
-		break;
-	case CHANNEL_D:
-		switch (tl_opcode) {
-		case D_ACCESSACK_OPCODE:
-            // return
-            // to-be implemented
-			break;
-		case D_ACCESSACKDATA_OPCODE:
-            // return
-            // to-be implemented
-			break;
-		case D_HINTACK_OPCODE:
-            // return
-            // to-be implemented
-			break;
-		case D_GRANT_OPCODE:
-            // return
-            // to-be implemented
-			break;
-		case D_GRANTDATA_OPCODE:
-            // return
-            // to-be implemented
-			break;
-		case D_RELEASEACK_OPCODE:
-            // return
-            // to-be implemented
-			break;
-		}		
-		break;
-	case CHANNEL_E:
-		switch (tl_opcode) {
-		case E_GRANTACK:
-            // return
-            // to-be implemented
-			break;
-		}
-		break;
-	default:
-		//DEBUG
-		printf("Unknown channel or opcode. %d/%d\n", tl_chan, tl_opcode);
-		exit(1);
-	}
-
-	free(tlmsg);
+    free(tlmsg);
 out:
 }
 

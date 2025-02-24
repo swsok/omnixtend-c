@@ -10,6 +10,7 @@
 #define CHANNEL_D       4
 #define CHANNEL_E       5
 
+#define TL_OPCODE_NUM 	8
 // Channel A
 #define A_PUTFULLDATA_OPCODE    0
 #define A_PUTPARTIALDATA_OPCODE 1
