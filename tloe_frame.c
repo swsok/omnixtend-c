@@ -56,8 +56,12 @@ void tloe_set_tlmsg(tloe_frame_t *frame, tl_msg_t *tlmsg, int loc) {
 	memcpy(&frame->flits[loc], tlmsg, sizeof(uint64_t));
 }
 
-int is_ack_msg(tloe_frame_t *frame) {
+int is_zero_tl_frame(tloe_frame_t *frame) {
+#if 1
 	return (frame->flits[MAX_SIZE_FLIT-1] == 0);
+#else
+    return 0;
+#endif
 }
 
 int is_conn_msg(tloe_frame_t *frame) {

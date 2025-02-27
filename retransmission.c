@@ -17,12 +17,13 @@ int retransmit(tloe_endpoint_t *e, int seq_num) {
             continue;
 
         frame = element->tloe_frame;
-        tloe_set_mask(&frame, 1);		// Indicate to normal packet
+        frame.header.seq_num_ack = e->acked_seq;
+//        tloe_set_mask(&frame, 1);		// Indicate to normal packet
 
         fprintf(stderr, "Retransmission with num_seq: %d\n", frame.header.seq_num);
         // Convert tloe_frame into packet
         tloe_frame_to_packet((tloe_frame_t *)&frame, send_buffer, sizeof(tloe_frame_t));
-	tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
+    	tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
 
         element->state = TLOE_RESENT;
         element->send_time = get_current_timestamp(&(e->iteration_ts));
@@ -55,3 +56,16 @@ void slide_window(tloe_endpoint_t *e, int last_seq_num) {
         rbe = (RetransmitBufferElement *) getfront(retransmit_buffer);
     }
 }
+
+RetransmitBufferElement *get_earliest_element(CircularQueue *retransmit_buffer) {
+    int i;
+    for (i=retransmit_buffer->front; i != retransmit_buffer->rear; i = (i + 1) % retransmit_buffer->size) {
+        RetransmitBufferElement *element = (RetransmitBufferElement *) retransmit_buffer->data[i];
+        if (element->send_time == 0)
+            continue;
+
+        return element;
+    }
+    return NULL;
+}
+

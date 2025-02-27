@@ -209,11 +209,15 @@ static int handle_user_input(tloe_endpoint_t *e, char input, int iter,
             }
         }
     } else if (input == 'c') {
+#if 0
         if (e->master == TYPE_MASTER)
             open_conn_master(e);
         else if (e->master == TYPE_SLAVE)
             open_conn_slave(e);
         printf("Open connection complete.\n");
+#else
+        e->connection = 1;
+#endif
     } else if (input == 'd') {
         if (e->master == TYPE_MASTER)
             close_conn_master(e);

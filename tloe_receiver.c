@@ -29,33 +29,6 @@ static void serve_ack(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
     }
 }
 
-static void serve_oos_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, uint32_t seq_num) {
-    int enqueued;
-    // The received TLoE frame is out of sequence, indicating that some frames were lost
-    // The frame should be dropped, NEXT_RX_SEQ is not updated
-    // A negative acknowledgment (NACK) is sent using the last properly received sequence number
-    uint32_t last_proper_rx_seq = seq_num;
-    tloe_frame_t *tloeframe = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
-
-    fprintf(stderr, "TLoE frame is out of sequence with "
-            "seq_num: %d, next_rx_seq: %d, last: %d\n",
-            recv_tloeframe->header.seq_num, e->next_rx_seq, last_proper_rx_seq);
-
-    // If the received frame contains data, enqueue it in the message buffer
-    BUG_ON(is_ack_msg(recv_tloeframe), "received frame must not be an ack frame.");
-
-    *tloeframe = *recv_tloeframe;
-    tloeframe->header.seq_num_ack = last_proper_rx_seq;
-    tloeframe->header.ack = TLOE_NAK;  // NAK
-    tloe_set_mask(tloeframe, 0);  // To indicate ACK
-    enqueued = enqueue(e->ack_buffer, (void *) tloeframe);
-    BUG_ON(!enqueued, "failed to enqueue ack frame.");
-
-    init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
-
-    e->oos_cnt++;
-}
-
 static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
     // printf("RX: Send pakcet to Tx channel for replying ACK/NAK with seq_num: %d, seq_num_ack: %d, ack: %d\n",
     //    tloeframe->header.seq_num, tloeframe->header.seq_num_ack, tloeframe->header.ack);
@@ -67,12 +40,17 @@ static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe
     // else send ACK
     BUG_ON(is_queue_full(e->tl_msg_buffer), "tl_msg_buffer is full");
 
+#if 0
     // Delayed ACK
     if (e->timeout_rx.ack_pending == 0) {
         e->timeout_rx.ack_pending = 1;
         e->timeout_rx.ack_time = get_current_timestamp(&(e->iteration_ts));
     }
     e->timeout_rx.last_ack_seq = recv_tloeframe->header.seq_num;
+#else
+    e->timeout_rx.ack_time = get_current_timestamp(&(e->iteration_ts));
+    e->timeout_rx.last_ack_seq = recv_tloeframe->header.seq_num;
+#endif
 
     // Enqueue to tl_msg_buffer for processing TileLink message if not NAK
     // Update sequence numbers
@@ -81,36 +59,64 @@ static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe
     e->timeout_rx.last_channel = tlmsg->header.chan;
     e->timeout_rx.last_credit = get_tlmsg_credit(tlmsg);
 
+#if 1
     if (!enqueue(e->tl_msg_buffer, (void *) tlmsg)) { 
         fprintf(stderr, "tl_msg_buffer overflow.\n");
         exit(1);
     }
+#endif
 
     e->timeout_rx.ack_cnt++;
     e->delay_cnt++;
 }
 
 static void serve_duplicate_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
+    int enqueued;
     int seq_num = recv_tloeframe->header.seq_num;
+    tloe_frame_t *tloeframe = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
     fprintf(stderr, "TLoE frame is a duplicate. "
             "seq_num: %d, next_rx_seq: %d\n",
             seq_num, e->next_rx_seq);
 
     // If the received frame contains data, enqueue it in the message buffer
-    BUG_ON(is_ack_msg(recv_tloeframe), "received frame must not be an ack frame.");
+    BUG_ON(is_zero_tl_frame(recv_tloeframe), "received frame must not be an ack frame.");
 
-    // Delayed ACK
-    if (e->timeout_rx.ack_pending == 0) {
-        e->timeout_rx.ack_pending = 1;
-        e->timeout_rx.ack_time = get_current_timestamp(&(e->iteration_ts));
-        e->timeout_rx.last_ack_seq = recv_tloeframe->header.seq_num;
-    } else if(tloe_seqnum_cmp(recv_tloeframe->header.seq_num, e->timeout_rx.last_ack_seq) > 0) {
-        e->timeout_rx.last_ack_seq = recv_tloeframe->header.seq_num;
-    } 
+    *tloeframe = *recv_tloeframe;
+    tloeframe->header.seq_num_ack = recv_tloeframe->header.seq_num;
+    tloeframe->header.ack = TLOE_ACK;  // ACK
+    tloe_set_mask(tloeframe, 0);  // To indicate ACK
+    enqueued = enqueue(e->ack_buffer, (void *) tloeframe);
+    BUG_ON(!enqueued, "failed to enqueue ack frame.");
 
     e->timeout_rx.ack_cnt++;
     e->delay_cnt++;
     e->dup_cnt++;
+}
+
+static void serve_oos_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, uint32_t seq_num) {
+    int enqueued;
+    // The received TLoE frame is out of sequence, indicating that some frames were lost
+    // The frame should be dropped, NEXT_RX_SEQ is not updated
+    // A negative acknowledgment (NACK) is sent using the last properly received sequence number
+    uint32_t last_proper_rx_seq = seq_num;
+    tloe_frame_t *tloeframe = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
+    fprintf(stderr, "TLoE frame is out of sequence with "
+            "seq_num: %d, next_rx_seq: %d, last: %d\n",
+            recv_tloeframe->header.seq_num, e->next_rx_seq, last_proper_rx_seq);
+
+    // If the received frame contains data, enqueue it in the message buffer
+    BUG_ON(is_zero_tl_frame(recv_tloeframe), "received frame must not be an ack frame.");
+
+    *tloeframe = *recv_tloeframe;
+    tloeframe->header.seq_num_ack = last_proper_rx_seq;
+    tloeframe->header.ack = TLOE_NAK;  // NAK
+    tloe_set_mask(tloeframe, 0);  // To indicate ACK
+    enqueued = enqueue(e->ack_buffer, (void *) tloeframe);
+    BUG_ON(!enqueued, "failed to enqueue ack frame.");
+
+    init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
+
+    e->oos_cnt++;
 }
 
 static void enqueue_ack_frame(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
@@ -154,13 +160,24 @@ void RX(tloe_endpoint_t *e) {
     // Convert packet into tloe_frame
 	packet_to_tloe_frame(recv_buffer, size, recv_tloeframe);
 
+#if 0
 	// ACK/NAK (zero-TileLink)
-	if (is_ack_msg(recv_tloeframe)) {
+	if (is_ackonly_msg(recv_tloeframe)) {
 		serve_ack(e, recv_tloeframe);
 		free(recv_tloeframe);
 
 		goto process_ack;
 	}
+#else
+	serve_ack(e, recv_tloeframe);
+    if (is_zero_tl_frame(recv_tloeframe)) {
+        e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->header.seq_num);
+        e->acked_seq = recv_tloeframe->header.seq_num_ack;
+
+        free(recv_tloeframe);
+        goto process_ack;
+    }
+#endif
 
 #ifdef TEST_TIMEOUT_DROP // (Test) Delayed ACK: Drop a certain number of normal packets
     if (e->master == 0) {
@@ -207,8 +224,8 @@ void RX(tloe_endpoint_t *e) {
 
 process_ack:
 	// Send a delayed ACK if the timeout has occurred
-	if (is_send_delayed_ack(&(e->iteration_ts), &(e->timeout_rx)))
-		enqueue_ack_frame(e, recv_tloeframe);
+	//if (is_send_delayed_ack(&(e->iteration_ts), &(e->timeout_rx)))
+//		enqueue_ack_frame(e, recv_tloeframe);
 out:
 }
 

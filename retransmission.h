@@ -24,5 +24,6 @@ typedef struct {
 
 int retransmit(tloe_endpoint_t *, int);
 void slide_window(tloe_endpoint_t *, int);
+RetransmitBufferElement *get_earliest_element(CircularQueue *retransmit_buffer);
 
 #endif // __RETRANSISSION_H__

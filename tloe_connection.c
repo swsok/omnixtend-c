@@ -101,10 +101,11 @@ void open_conn_master(tloe_endpoint_t *e) {
 
             clock_gettime(CLOCK_MONOTONIC, &now);
             long elapsed_us = (now.tv_sec - start.tv_sec) * 1000000L + (now.tv_nsec - start.tv_nsec) / 1000L;
-
+#if 0
             if (elapsed_us >= TIMEOUT_TIME) {
                 break;
             }
+#endif
             usleep(100);
         }
 

@@ -8,43 +8,45 @@
 #include "retransmission.h"
 #include "timeout.h"
 
-static int enqueue_retransmit_buffer(tloe_endpoint_t *e, RetransmitBufferElement *rbe, tl_msg_t *tlmsg) {
-	// Update the sequence number
-	rbe->tloe_frame.header.seq_num = e->next_tx_seq;
-	// Set the tilelink msg
-	tloe_set_tlmsg(&(rbe->tloe_frame), tlmsg, 0);
+static int enqueue_retransmit_buffer(tloe_endpoint_t *e, RetransmitBufferElement *rbe, tloe_frame_t *f) {
+	// Set the tloe frame
+    memcpy(&rbe->tloe_frame, f, sizeof(tloe_frame_t));
 	// Set the state to TLOE_INIT
 	rbe->state = TLOE_INIT;
 	// Get the current time
-	rbe->send_time = get_current_timestamp(&(e->iteration_ts));
+    //rbe->send_time = is_zero_tl_frame(f) ? get_current_timestamp(&(e->iteration_ts)) : 0;
+    rbe->send_time = get_current_timestamp(&(e->iteration_ts));
+
 	return enqueue(e->retransmit_buffer, rbe);
 }
 
-static void send_request_normal_tlmsg(tloe_endpoint_t *e, tl_msg_t *tlmsg) {
-    tloe_frame_t *f = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
-    char send_buffer[MAX_BUFFER_SIZE];
-
+static void prepare_normal_frame(tloe_endpoint_t *e, tloe_frame_t *f, tl_msg_t *tlmsg) {
     // Update the sequence number
     f->header.seq_num = e->next_tx_seq;
     // Update the sequence number of the ack
-    f->header.seq_num_ack = e->acked_seq;
+    f->header.seq_num_ack = tloe_seqnum_prev(e->next_rx_seq);
     // Set the ack to TLOE_ACK
     f->header.ack = TLOE_ACK;
-    // Set the mask to indicate normal packet
-    tloe_set_mask(f, 1);
-    // Set the tilelink msg
-    tloe_set_tlmsg(f, tlmsg, 0);
+    if (tlmsg) {
+        // Set the mask to indicate normal packet
+        tloe_set_mask(f, 1);
+        // Set the tilelink msg
+        tloe_set_tlmsg(f, tlmsg, 0);
+    } else {
+        tloe_set_mask(f, 0);
+    }
     // Set 0 to channel and credit
     f->header.chan = 0;
     f->header.credit = 0;
+}
+
+static void send_request_normal_frame(tloe_endpoint_t *e, tloe_frame_t *f) {
+    char send_buffer[MAX_BUFFER_SIZE];
 
     // Convert tloe_frame into packet
     tloe_frame_to_packet((tloe_frame_t *)f, send_buffer, sizeof(tloe_frame_t));
     // Send the request_normal_frame using the ether
     tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
-
-    // Free tloe_frame_t
-    free(f);
 }
 
 tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
@@ -53,6 +55,79 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
     RetransmitBufferElement *rbe;
     char send_buffer[MAX_BUFFER_SIZE];
 
+	if (is_queue_full(e->retransmit_buffer)) {
+		return_tlmsg = request_normal_tlmsg;
+        goto out;
+    }
+
+    if (request_normal_tlmsg == NULL && is_queue_empty(e->ack_buffer)) {
+        goto out;
+    }
+
+    if (request_normal_tlmsg) {
+        // Handle credit
+        if (dec_credit(&(e->fc), request_normal_tlmsg->header.chan, 1) == 0) {
+            return_tlmsg = request_normal_tlmsg;
+            goto out;
+        } else {
+            e->fc_dec_cnt++;
+        }
+    }
+
+    // Create normal frame
+    tloe_frame_t *f = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
+    prepare_normal_frame(e, f, request_normal_tlmsg);
+
+    if (!is_queue_empty(e->ack_buffer)) {
+        tloe_frame_t *ack_frame;
+
+        ack_frame = (tloe_frame_t *)dequeue(e->ack_buffer);
+        f->header.seq_num_ack = ack_frame->header.seq_num_ack;
+
+        free(ack_frame);
+    }
+
+    // Enqueue to retransmitBuffer
+    rbe = (RetransmitBufferElement *)malloc(sizeof(RetransmitBufferElement));
+    if (!rbe) {
+        fprintf(stderr, "%s[%d] failed to allocate memory for retransmit buffer element.\n"
+                "the requested frame must be retransmitted for the next TX",
+                __FILE__, __LINE__);
+        return_tlmsg = request_normal_tlmsg;
+        goto out;
+    }
+
+    // Enqueue to retransmit buffer
+    enqueued = enqueue_retransmit_buffer(e, rbe, f);
+    BUG_ON(!enqueued, "failed to enqueue retransmit buffer element.");
+
+    // Send normal frame
+    // Send the request_normal_tlmsg
+    send_request_normal_frame(e, f);
+    // Set the state to TLOE_SENT
+    rbe->state = TLOE_SENT;
+
+    // Increase the sequence number of the endpoint
+    e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
+
+out:
+	// Retransmit all the elements in the retransmit buffer if the timeout has occurred
+//	if ((rbe = get_earliest_element(e->retransmit_buffer)) && is_timeout_tx(&(e->iteration_ts), rbe->send_time)) {
+	if ((rbe = getfront(e->retransmit_buffer)) && is_timeout_tx(&(e->iteration_ts), rbe->send_time)) {
+		fprintf(stderr, "TX: Timeout TX and retranmission from seq_num: %d\n", rbe->tloe_frame.header.seq_num);
+		retransmit(e, rbe->tloe_frame.header.seq_num);
+	}
+	return return_tlmsg;
+}
+
+#if 0
+tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
+    int enqueued;
+    tl_msg_t *return_tlmsg = NULL;
+    RetransmitBufferElement *rbe;
+    char send_buffer[MAX_BUFFER_SIZE];
+
+#if 1
     if (!is_queue_empty(e->ack_buffer)) {
         tloe_frame_t *ack_frame;
 
@@ -71,9 +146,9 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
         }
     }   
 #endif
-        // ACK/NAK packet (zero-TileLink)
         // Reflect the sequence number but do not store in the retransmission buffer, just send
         ack_frame->header.seq_num = e->next_tx_seq;
+        ack_frame->header.seq_num_ack = tloe_seqnum_prev(e->next_rx_seq);
 
         // Convert tloe_frame into packet
         tloe_frame_to_packet(ack_frame, send_buffer, sizeof(tloe_frame_t)); 
@@ -81,7 +156,10 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 
         // ack_frame must be freed because of the dequeue
         free(ack_frame);
+
+        e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
 	} 
+#endif
 	if (request_normal_tlmsg && !is_queue_full(e->retransmit_buffer)) {
 		// NORMAL packet
 		// Reflect the sequence number, store in the retransmission buffer, and send
@@ -128,3 +206,4 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 out:
 	return return_tlmsg;
 }
+#endif
