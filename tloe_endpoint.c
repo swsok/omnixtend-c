@@ -13,59 +13,115 @@
 #include "tloe_frame.h"
 #include "tloe_transmitter.h"
 #include "tloe_receiver.h"
+#include "tloe_connection.h"
 #include "tilelink_msg.h"
+#include "tilelink_handler.h"
 #include "retransmission.h"
 #include "timeout.h"
 #include "util/circular_queue.h"
 #include "util/util.h"
 
-void init_tloe_endpoint(tloe_endpoint_t *e, TloeEther *ether, int master_slave) {
+#define CHECK_FABRIC_TYPE_CONFLICT(current_type, expected_type, msg) do { \
+    if (current_type != -1 && current_type != expected_type) { \
+        fprintf(stdout, "Error: %s\n", msg); \
+        print_usage(); \
+        ret = -1; \
+        goto out; \
+    } \
+} while(0)
+
+static void tloe_endpoint_init(tloe_endpoint_t *e, int fabric_type, int master_slave) {
 	e->is_done = 0;
+	e->connection = 0;
 	e->master = master_slave;
+    e->fabric_type = fabric_type;
 
 	e->next_tx_seq = 0;
 	e->next_rx_seq = 0;
 	e->acked_seq = MAX_SEQ_NUM;
 	e->acked = 0;
 
+    if (e->retransmit_buffer != NULL) delete_queue(e->retransmit_buffer);
+    if (e->rx_buffer != NULL) delete_queue(e->rx_buffer);
+	if (e->message_buffer != NULL) delete_queue(e->message_buffer);
+	if (e->ack_buffer != NULL) delete_queue(e->ack_buffer);
+	if (e->tl_msg_buffer != NULL) delete_queue(e->tl_msg_buffer);
+	if (e->response_buffer != NULL) delete_queue(e->response_buffer);
+
     e->retransmit_buffer = create_queue(WINDOW_SIZE + 1);
     e->rx_buffer = create_queue(10); // credits
 	e->message_buffer = create_queue(10000);
 	e->ack_buffer = create_queue(100);
-
-	e->ether = ether;
+	e->tl_msg_buffer = create_queue(10000);
+	e->response_buffer = create_queue(100);
 
 	init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
+	init_flowcontrol(&(e->fc));
+
+	e->ack_cnt = 0;
+	e->dup_cnt = 0;
+	e->oos_cnt = 0;
+	e->delay_cnt = 0;
+	e->drop_cnt = 0;
 
 	e->drop_npacket_size = 0;
 	e->drop_npacket_cnt = 0;
 	e->drop_apacket_size = 0;
 	e->drop_apacket_cnt = 0;
+
+	e->fc_inc_cnt = 0;
+	e->fc_dec_cnt = 0;
+
+	e->drop_tlmsg_cnt = 0;
+	e->drop_response_cnt = 0;
+
+    e->close_flag = 0;
 }
 
-void close_tloe_endpoint(tloe_endpoint_t *e) {
+static void tloe_endpoint_close(tloe_endpoint_t *e) {
     // Join threads
     pthread_join(e->tloe_endpoint_thread, NULL);
 
     // Cleanup
-    tloe_ether_close(e->ether);
+    tloe_fabric_close(e);
+
+    // Cleanup
+    tl_handler_close();
 
     // Cleanup queues
     delete_queue(e->message_buffer);
     delete_queue(e->retransmit_buffer);
     delete_queue(e->rx_buffer);
     delete_queue(e->ack_buffer);
+	delete_queue(e->tl_msg_buffer);
+	delete_queue(e->response_buffer);
+}
+
+// Select data to process from buffers based on priority order  
+// ack_buffer -> response_buffer -> message_buffer
+static tl_msg_t *select_buffer(tloe_endpoint_t *e) {
+	tl_msg_t *tlmsg = NULL;
+
+	tlmsg = (tl_msg_t *) dequeue(e->response_buffer);
+	if (tlmsg) 
+		goto out;
+
+	tlmsg = (tl_msg_t *) dequeue(e->message_buffer);
+out:
+	return tlmsg;
 }
 
 void *tloe_endpoint(void *arg) {
 	tloe_endpoint_t *e = (tloe_endpoint_t *)arg;
 
-	TileLinkMsg *request_tlmsg = NULL;
-	TileLinkMsg *not_transmitted_tlmsg = NULL;
+	tl_msg_t *request_tlmsg = NULL;
+	tl_msg_t *not_transmitted_tlmsg = NULL;
 
 	while(!e->is_done) {
-		if (!request_tlmsg && !is_queue_empty(e->message_buffer)) 
-			request_tlmsg = dequeue(e->message_buffer);
+        while(!e->connection) continue;
+
+		if (!request_tlmsg)
+			request_tlmsg = select_buffer(e);
 
 		// Get reference timestemp for the single iteration
 		update_iteration_timestamp(&(e->iteration_ts));
@@ -80,83 +136,232 @@ void *tloe_endpoint(void *arg) {
 		}
 
 		RX(e);
+
+		tl_handler(e);
 	}
+}
+
+static void print_endpoint_status(tloe_endpoint_t *e) {
+    printf("-----------------------------------------------------\n"
+           "Sequence Numbers:\n"
+           " TX: %d, RX: %d\n"
+           "\nPacket Statistics:\n"
+           " ACK: %d, Duplicate: %d, Out-of-Sequence: %d\n"
+           " Delayed: %d, Dropped: %d (Normal: %d, ACK: %d)\n"
+	   " Estimated ACK on the other side: %d\n"
+           "Channel Credits [A|B|C|D|E]: %d|%d|%d|%d|%d\n"
+           " Flow Control (Inc/Dec): %d/%d\n"
+           "\nBuffer Drops:\n"
+           " TL Messages: %d, Responses: %d\n"
+           "-----------------------------------------------------\n",
+           e->next_tx_seq, e->next_rx_seq,
+           e->ack_cnt, e->dup_cnt, e->oos_cnt,
+           e->delay_cnt, e->drop_cnt, e->drop_npacket_cnt, e->drop_apacket_cnt,
+	   e->next_rx_seq-e->delay_cnt+e->oos_cnt+e->dup_cnt-e->drop_apacket_cnt,
+           e->fc.credits[CHANNEL_A], e->fc.credits[CHANNEL_B], 
+           e->fc.credits[CHANNEL_C], e->fc.credits[CHANNEL_D], 
+           e->fc.credits[CHANNEL_E], e->fc_inc_cnt, e->fc_dec_cnt,
+           e->drop_tlmsg_cnt, e->drop_response_cnt);
+}
+
+static int create_and_enqueue_message(tloe_endpoint_t *e, int msg_index) {
+    tl_msg_t *new_tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));
+    if (!new_tlmsg) {
+        printf("Memory allocation failed at packet %d!\n", msg_index);
+        return 0;
+    }
+
+    new_tlmsg->header.chan = CHANNEL_A;
+    new_tlmsg->header.opcode = A_GET_OPCODE;
+    // TODO new_tlmsg->num_flit = 4;
+
+    while(is_queue_full(e->message_buffer)) 
+        usleep(1000);
+
+    if (enqueue(e->message_buffer, new_tlmsg)) {
+        if (msg_index % 100 == 0)
+            fprintf(stderr, "Packet %d added to message_buffer\n", msg_index);
+        return 1;
+    } else {
+        free(new_tlmsg);
+        return 0;
+    }
+}
+
+static void print_credit_status(tloe_endpoint_t *e) {
+    printf("Open connection is done. Credit %d | %d | %d | %d | %d\n",
+        get_credit(&(e->fc), CHANNEL_A), get_credit(&(e->fc), CHANNEL_B),
+        get_credit(&(e->fc), CHANNEL_C), get_credit(&(e->fc), CHANNEL_D),
+        get_credit(&(e->fc), CHANNEL_E));
+}
+
+static int handle_user_input(tloe_endpoint_t *e, char input, int iter, 
+				int fabric_type, int master) {
+    int ret = 0;
+
+    if (input == 's') {
+        print_endpoint_status(e);
+    } else if (input == 'a') {
+        if (!is_conn(e)) return 0;
+        for (int i = 0; i < iter; i++) {
+            if (!create_and_enqueue_message(e, i)) {
+                break;  // Stop if buffer is full or allocation fails
+            }
+        }
+    } else if (input == 'c') {
+        if (e->master == TYPE_MASTER)
+            open_conn_master(e);
+        else if (e->master == TYPE_SLAVE)
+            open_conn_slave(e);
+        printf("Open connection complete.\n");
+    } else if (input == 'd') {
+        if (e->master == TYPE_MASTER)
+            close_conn_master(e);
+        else if (e->master == TYPE_SLAVE)
+            close_conn_slave(e);
+        printf("Close connection complete.\n");
+    } else if (input == 'q') {
+        e->is_done = 1;
+        printf("Exiting...\n");
+        ret = 1;
+        goto out;
+    } else {
+        if (!is_conn(e)) return 0;
+    }
+out:
+    return ret;
+}
+
+static void print_usage(void) {
+    fprintf(stdout, "Usage: tloe_endpoint {-i<ethernet interface> -d<destination mac address> | -p<mq name>} {-m | -s}\n");
+}
+
+static int parse_arguments(int argc, char *argv[], int *fabric_type, int *master, 
+                         char *optarg_a, size_t optarg_a_size,
+                         char *optarg_b, size_t optarg_b_size) {
+    int opt;
+    int ret = 0;
+    *fabric_type = -1;
+    *master = -1;
+
+    while ((opt = getopt(argc, argv, "i:d:p:ms")) != -1) {
+        switch (opt) {
+            case 'i':
+                CHECK_FABRIC_TYPE_CONFLICT(*fabric_type, TLOE_FABRIC_ETHER, 
+                    "Cannot mix ethernet and mq mode options");
+                *fabric_type = TLOE_FABRIC_ETHER;
+                strncpy(optarg_a, optarg, optarg_a_size - 1);
+                optarg_a[optarg_a_size - 1] = '\0';
+                break;
+            case 'd':
+                CHECK_FABRIC_TYPE_CONFLICT(*fabric_type, TLOE_FABRIC_ETHER,
+                    "Cannot mix ethernet and mq mode options");
+                *fabric_type = TLOE_FABRIC_ETHER;
+                strncpy(optarg_b, optarg, optarg_b_size - 1);
+                optarg_b[optarg_b_size - 1] = '\0';
+                break;
+            case 'p':
+                CHECK_FABRIC_TYPE_CONFLICT(*fabric_type, TLOE_FABRIC_MQ,
+                    "Cannot mix ethernet and mq mode options");
+                *fabric_type = TLOE_FABRIC_MQ;
+                strncpy(optarg_a, optarg, optarg_a_size - 1);
+                optarg_a[optarg_a_size - 1] = '\0';
+                break;
+            case 'm':
+                *master = 1;
+                break;
+            case 's':
+                *master = 0;
+                break;
+            default:
+                print_usage();
+                ret = -1;
+                goto out;
+        }
+    }
+
+    // fabric type must be specified
+    if (*fabric_type == -1) {
+        fprintf(stdout, "Error: Must specify either ethernet mode (-i, -d) or mq mode (-p)\n");
+        print_usage();
+        ret = -1;
+        goto out;
+    }
+
+    // ethernet mode requires both interface and destination MAC	
+    if (*fabric_type == TLOE_FABRIC_ETHER && (optarg_a[0] == '\0' || optarg_b[0] == '\0')) {
+        fprintf(stdout, "Error: Ethernet mode requires both interface (-i) and destination MAC (-d)\n");
+        print_usage();
+        ret = -1;
+        goto out;
+    }
+
+    // master or slave mode must be specified
+    if (*master == -1) {
+        fprintf(stdout, "Error: Must specify either master (-m) or slave (-s) mode\n");
+        print_usage();
+        ret = -1;
+        goto out;
+    }
+
+    if (*fabric_type == TLOE_FABRIC_MQ) {
+        strncpy(optarg_b, *master ? "-master" : "-slave", sizeof("-master"));
+    }
+
+out:
+    return ret;
 }
 
 int main(int argc, char *argv[]) {
-	tloe_endpoint_t *e;
-	TloeEther *ether;
-	char input, input_count[32];
-	int master_slave = 0; 
-	int iter = 0;
+    tloe_endpoint_t *e;
+    TloeEther *ether;
+    char input, input_count[32];
+    int master_slave;
+    int iter = 0;
+    char dev_name[64] = {0};
+    char dest_mac_addr[64] = {0};
+    int fabric_type;
 
-	if (argc < 3) {
-		printf("Usage: tloe_endpoint queue_name master[1]/slave[0]\n");
-		exit(0);
-	}
+    if (parse_arguments(argc, argv, &fabric_type, &master_slave, 
+                       dev_name, sizeof(dev_name),
+                       dest_mac_addr, sizeof(dest_mac_addr)) < 0) {
+        exit(EXIT_FAILURE);
+    }
 
-	srand(time(NULL));
+#if defined(DEBUG) || defined(TEST_NORMAL_FRAME_DROP) || defined(TEST_TIMEOUT_DROP)
+    srand(time(NULL));
+#endif
 
-	master_slave = atoi(argv[2]);
-	if (master_slave == 1)
-		ether = tloe_ether_open(argv[1], 1);
-	else
-		ether = tloe_ether_open(argv[1], 0);
+    // Initialization independent of tloe_endpoint
+    tl_handler_init();
 
-	e = (tloe_endpoint_t *)malloc(sizeof(tloe_endpoint_t));
+    // Initialize tloe_endpoint
+    e = (tloe_endpoint_t *)malloc(sizeof(tloe_endpoint_t));
+    tloe_endpoint_init(e, fabric_type, master_slave);
+    tloe_fabric_init(e, fabric_type);
 
-	init_tloe_endpoint(e, ether, master_slave);
+    // intead of a direct call to tloe_ether_open
+    tloe_fabric_open(e, dev_name, dest_mac_addr);
 
-	if (pthread_create(&(e->tloe_endpoint_thread), NULL, tloe_endpoint, e) != 0) {
+    if (pthread_create(&(e->tloe_endpoint_thread), NULL, tloe_endpoint, e) != 0) {
         error_exit("Failed to create tloe endpoint thread");
     }
-    
-	while(!(e->is_done)) {
-		printf("Enter 's' to status, 'a' to send, 'q' to quit:\n");
-		printf("> ");
-		fgets(input_count, sizeof(input_count), stdin);
 
-		if (sscanf(input_count, " %c %d", &input, &iter) < 1) {
-			printf("Invalid input! Try again.\n");
-			continue;
-		}
+    while(!(e->is_done)) {
+        printf("Enter 'c' to open, 'd' to close, 's' to status, 'a' to send, 'q' to quit:\n");
+        printf("> ");
+        fgets(input_count, sizeof(input_count), stdin);
 
-		if (input == 's') {
-			printf("-----------------------------------------------------\n");
-			printf(" next_tx: %d, next_rx: %d, ack_cnt: %d, dup: %d, oos: %d, delay: %d, drop: %d, dnormal: %d, dack: %d\n", 
-				e->next_tx_seq, e->next_rx_seq, e->ack_cnt, 
-				e->dup_cnt, e->oos_cnt, e->delay_cnt, e->drop_cnt, 
-				e->drop_npacket_cnt, e->drop_apacket_cnt);
-			printf("-----------------------------------------------------\n");
-		} else if (input == 'a') {
-			for (int i = 0; i < iter; i++) {
-				TileLinkMsg *new_tlmsg = (TileLinkMsg *)malloc(sizeof(TileLinkMsg));
-				if (!new_tlmsg) {
-					printf("Memory allocation failed at packet %d!\n", i);
-					continue;
-				}
+        if (sscanf(input_count, " %c %d", &input, &iter) < 1) {
+            printf("Invalid input! Try again.\n");
+            continue;
+        }
 
-				while(is_queue_full(e->message_buffer)) 
-					usleep(1000);
+        if (handle_user_input(e, input, iter, fabric_type, master_slave))
+            break;
+    }
 
-				if (enqueue(e->message_buffer, new_tlmsg)) {
-					if (i % 100 == 0)
-						fprintf(stderr, "Packet %d added to message_buffer\n", i);
-				} else {
-					//printf("Failed to enqueue packet %d, buffer is full.\n", i);
-					free(new_tlmsg);
-					break;  // Stop if buffer is full
-				}
-			}
-		} else if (input == 'q') {
-			e->is_done = 1;
-			printf("Exiting...\n");
-			break;
-		}
-	}
+    tloe_endpoint_close(e);
 
-	close_tloe_endpoint(e);
-
-	return 0;
+    return 0;
 }
-

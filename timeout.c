@@ -12,7 +12,7 @@ long get_current_timestamp(struct timespec *ts) {
 
 // Check if the timeout has occurred
 int is_timeout_tx(struct timespec *ts, time_t ref_time) {
-	return difftime(get_current_timestamp(ts), ref_time) >= DELAYED_ACK_TIME;
+	return difftime(get_current_timestamp(ts), ref_time) >= TIMEOUT_TIME;
 }
 
 // Initialize the timeout receiver
@@ -25,14 +25,14 @@ void init_timeout_rx(struct timespec *ts, timeout_t *rx) {
 
 // Check if the delayed ACK should be sent
 int is_send_delayed_ack(struct timespec *ts, timeout_t *rx) {
-#if 0
+#if 0 // Disable delayed effect
 	if (rx->ack_pending == 1)	
 		return 1;
 #else
 	long curr_ms = get_current_timestamp(ts);
 	long elapsed_ms = curr_ms - rx->ack_time;
 
-	if (rx->ack_pending && elapsed_ms >= TIMEOUT_TIME) {
+	if (rx->ack_pending && elapsed_ms >= DELAYED_ACK_TIME) {
 		return 1;
 	}
 	return 0;

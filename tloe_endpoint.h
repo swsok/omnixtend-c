@@ -1,31 +1,45 @@
 #ifndef __TLOE_ENDPOINT_H__
 #define __TLOE_ENDPOINT_H__
-#include "timeout.h"
+
+#include <stdint.h>
+#include "tloe_fabric.h"
 #include "tloe_ether.h"
 #include "tloe_frame.h"
+#include "timeout.h"
+#include "flowcontrol.h"
 #include "util/circular_queue.h"
 
-#define MAX_SEQ_NUM     ((1<<10)-1)
+#define MAX_SEQ_NUM      ((uint32_t)(1<<22)-1)
 #define HALF_MAX_SEQ_NUM ((MAX_SEQ_NUM + 1)/2)
+#define MAX_BUFFER_SIZE  1500
+#define TYPE_MASTER      1
+#define TYPE_SLAVE       0
 
 typedef struct tloe_endpoint_struct {
-	TloeEther *ether;
+	tloe_fabric_ops_t fabric_ops; // Current media operations in use
+
 	CircularQueue *retransmit_buffer;
 	CircularQueue *rx_buffer;
 	CircularQueue *message_buffer;
 	CircularQueue *ack_buffer;
+	CircularQueue *tl_msg_buffer;
+	CircularQueue *response_buffer;
 
 	timeout_t timeout_rx;
 	struct timespec iteration_ts;
 
+	flowcontrol_t fc;
+
     pthread_t tloe_endpoint_thread;
 
-	int is_done;
+	int connection;
 	int master;
+	int is_done;
+    int fabric_type;
 
 	int next_tx_seq;
 	int next_rx_seq;
-	int acked_seq;
+	uint32_t acked_seq;
 	int acked;
 
 	int ack_cnt;
@@ -38,6 +52,14 @@ typedef struct tloe_endpoint_struct {
 	int drop_npacket_cnt;
 	int drop_apacket_size;
 	int drop_apacket_cnt;
+
+	int fc_inc_cnt;
+	int fc_dec_cnt;
+
+	int drop_tlmsg_cnt;
+	int drop_response_cnt;
+
+    int close_flag;
 } tloe_endpoint_t;
 
 typedef enum {
@@ -46,8 +68,8 @@ typedef enum {
 	REQ_OOS,
 } tloe_rx_req_type_t;
 
-static inline int tloe_seqnum_cmp(int a, int b) {
-    int diff = a - b;  // 두 값의 차이 계산
+static inline int tloe_seqnum_cmp(uint32_t a, uint32_t b) {
+    int diff = (int)a - (int)b;  // 두 값의 차이 계산
 
     if (diff == 0) {
         return 0;  // 두 값이 동일
@@ -61,19 +83,19 @@ static inline int tloe_seqnum_cmp(int a, int b) {
     }
 }
 
-static inline int tloe_seqnum_prev(int seq_num) {
-	int t = seq_num - 1;
+static inline uint32_t tloe_seqnum_prev(uint32_t seq_num) {
+	int t = (int)seq_num - 1;
 	if (t < 0) 
 		t = MAX_SEQ_NUM;
-	return t;
+	return (uint32_t)t;
 }
 
-static inline int tloe_seqnum_next(int seq_num) {
+static inline uint32_t tloe_seqnum_next(uint32_t seq_num) {
 	return (seq_num + 1) & MAX_SEQ_NUM;
 }
 
-static inline tloe_rx_req_type_t tloe_rx_get_req_type(tloe_endpoint_t *e, TloeFrame *f) {
-	int diff_seq = tloe_seqnum_cmp(f->seq_num, e->next_rx_seq);
+static inline tloe_rx_req_type_t tloe_rx_get_req_type(tloe_endpoint_t *e, tloe_frame_t *f) {
+	int diff_seq = tloe_seqnum_cmp(f->header.seq_num, e->next_rx_seq);
 	if (diff_seq == 0)
 		return REQ_NORMAL;
 	else if (diff_seq < 0)

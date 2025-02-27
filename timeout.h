@@ -2,13 +2,15 @@
 #define __TIMEOUT_H__
 #include <time.h>
 
-#define DELAYED_ACK_TIME 10000   // RTT * 2 (unit:us)
-#define TIMEOUT_TIME     100      // RTT * 2 (unit:us)
+#define DELAYED_ACK_TIME 1   // RTT * 2 (unit:us)
+#define TIMEOUT_TIME     100000   // RTT * 2 (unit:us)
 
 typedef struct {
 	long ack_time;
 	int last_ack_seq;
 	int ack_pending;
+	int last_channel;
+	int last_credit;
 	int ack_cnt;
 } timeout_t;
 

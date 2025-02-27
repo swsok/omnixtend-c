@@ -9,5 +9,12 @@
     } \
 } while (0)
 
+#ifdef DEBUG
+#define DEBUG_PRINT(fmt, ...) \
+        fprintf(stderr, "[DEBUG] %s:%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__)
+#else
+#define DEBUG_PRINT(fmt, ...) (void)0
+#endif
+
 #endif // __TLOE_COMMON_H__
 
