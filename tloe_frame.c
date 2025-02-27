@@ -64,6 +64,10 @@ int is_zero_tl_frame(tloe_frame_t *frame) {
 #endif
 }
 
+int is_ackonly_frame(tloe_frame_t *frame) {
+    return (frame->header.type == TYPE_ACKONLY);
+}
+
 int is_conn_msg(tloe_frame_t *frame) {
     return (frame->header.type == 2 || frame->header.type == 3) ? frame->header.type : -1;
 }

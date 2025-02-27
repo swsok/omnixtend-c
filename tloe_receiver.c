@@ -65,9 +65,6 @@ static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe
         exit(1);
     }
 #endif
-
-    e->timeout_rx.ack_cnt++;
-    e->delay_cnt++;
 }
 
 static void serve_duplicate_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
@@ -88,8 +85,6 @@ static void serve_duplicate_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloef
     enqueued = enqueue(e->ack_buffer, (void *) tloeframe);
     BUG_ON(!enqueued, "failed to enqueue ack frame.");
 
-    e->timeout_rx.ack_cnt++;
-    e->delay_cnt++;
     e->dup_cnt++;
 }
 
@@ -139,6 +134,29 @@ static void enqueue_ack_frame(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) 
 	e->delay_cnt--;
 }
 
+// TODO to-be modified
+static void send_ackonly_frame(tloe_endpoint_t *e, tloe_frame_t *recv_frame) {
+	char send_buffer[MAX_BUFFER_SIZE];
+    tloe_frame_t f;
+
+    f.header.type = TYPE_ACKONLY;
+    // Update the sequence number
+    f.header.seq_num = e->next_tx_seq;
+    // Update the sequence number of the ack
+    f.header.seq_num_ack = recv_frame->header.seq_num;
+    // Set the ack to TLOE_ACK
+    f.header.ack = TLOE_ACK;
+    tloe_set_mask(&f, 0);
+    // Set 0 to channel and credit
+    f.header.chan = 0;
+    f.header.credit = 0;
+
+    // Convert tloe_frame into packet
+    tloe_frame_to_packet((tloe_frame_t *)&f, send_buffer, sizeof(tloe_frame_t));
+    // Send the request_normal_frame using the ether
+    tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
+}
+
 void RX(tloe_endpoint_t *e) {
 	int size;
 	chan_credit_t chan_credit;
@@ -160,24 +178,27 @@ void RX(tloe_endpoint_t *e) {
     // Convert packet into tloe_frame
 	packet_to_tloe_frame(recv_buffer, size, recv_tloeframe);
 
-#if 0
-	// ACK/NAK (zero-TileLink)
-	if (is_ackonly_msg(recv_tloeframe)) {
-		serve_ack(e, recv_tloeframe);
-		free(recv_tloeframe);
+	serve_ack(e, recv_tloeframe);
 
+	// ACK/NAK (ACKONLY frame, spec 1.1)
+	if (is_ackonly_frame(recv_tloeframe)) {
+        e->acked_seq = recv_tloeframe->header.seq_num_ack;
+		free(recv_tloeframe);
 		goto process_ack;
 	}
-#else
-	serve_ack(e, recv_tloeframe);
+
+    // Zero tilelink frame
     if (is_zero_tl_frame(recv_tloeframe)) {
         e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->header.seq_num);
         e->acked_seq = recv_tloeframe->header.seq_num_ack;
 
+        // TODO move TX or delayed ack??
+        // Send ACKONLY msg
+        send_ackonly_frame(e, recv_tloeframe);
+
         free(recv_tloeframe);
         goto process_ack;
     }
-#endif
 
 #ifdef TEST_TIMEOUT_DROP // (Test) Delayed ACK: Drop a certain number of normal packets
     if (e->master == 0) {

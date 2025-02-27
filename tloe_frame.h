@@ -40,6 +40,7 @@ int tloe_get_mask(tloe_frame_t *);
 void tloe_get_tlmsg(tloe_frame_t *, tl_msg_t *, int);
 void tloe_set_tlmsg(tloe_frame_t *, tl_msg_t *, int);
 int is_zero_tl_frame(tloe_frame_t *);
+int is_ackonly_frame(tloe_frame_t *);
 int is_conn_msg(tloe_frame_t *);
 void tloe_frame_to_packet(tloe_frame_t *, char *, int);
 void packet_to_tloe_frame(char *, int, tloe_frame_t *);
