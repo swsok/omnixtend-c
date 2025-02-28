@@ -15,18 +15,31 @@ void set_credit(flowcontrol_t *fc, int channel, int credit) {
 }
 
 int is_filled_credit(flowcontrol_t *fc, int channel) {
+#if 0
     return fc->credits[channel] > (1 << CREDIT_INIT);
+#else
+    if (channel == CHANNEL_A || channel == CHANNEL_C || channel == CHANNEL_E)
+        return fc->credits[channel] > (1 << CREDIT_INIT);
+    else
+        return 0;
+#endif
 }
 
 int check_all_channels(flowcontrol_t *fc) {
     int result = 1;
     int credit_init = (1 << CREDIT_INIT);
 
+#if 0
     if ((fc->credits[CHANNEL_A] > credit_init) && \
         (fc->credits[CHANNEL_B] > credit_init) && \
         (fc->credits[CHANNEL_C] > credit_init) && \
         (fc->credits[CHANNEL_D] > credit_init) && \
         (fc->credits[CHANNEL_E] > credit_init)) {
+#else
+    if ((fc->credits[CHANNEL_A] > credit_init) && \
+        (fc->credits[CHANNEL_C] > credit_init) && \
+        (fc->credits[CHANNEL_E] > credit_init)) {
+#endif
         result = 0;
     }
 

@@ -5,10 +5,12 @@
 
 #define TLOE_NAK              0
 #define TLOE_ACK              1
+#define TYPE_NORMAL           0
 #define TYPE_ACKONLY          1
 #define TYPE_OPEN_CONNECTION  2
 #define TYPE_CLOSE_CONNECTION 3
 #define MAX_SIZE_FLIT         65
+#define DEFAULT_FRAME_SIZE    56
 
 typedef struct __attribute__((packed,aligned(8))) {
     unsigned char credit:5;
@@ -35,14 +37,15 @@ int tloe_set_seq_num_ack(tloe_frame_t *, int);
 int tloe_get_seq_num_ack(tloe_frame_t *);
 int tloe_set_ack(tloe_frame_t *, int);
 int tloe_get_ack(tloe_frame_t *);
-int tloe_set_mask(tloe_frame_t *, int);
-int tloe_get_mask(tloe_frame_t *);
+int tloe_set_mask(tloe_frame_t *, int, int);
+int tloe_get_mask(tloe_frame_t *, int);
 void tloe_get_tlmsg(tloe_frame_t *, tl_msg_t *, int);
 void tloe_set_tlmsg(tloe_frame_t *, tl_msg_t *, int);
-int is_zero_tl_frame(tloe_frame_t *);
+int is_zero_tl_frame(tloe_frame_t *, int);
 int is_ackonly_frame(tloe_frame_t *);
 int is_conn_msg(tloe_frame_t *);
 void tloe_frame_to_packet(tloe_frame_t *, char *, int);
 void packet_to_tloe_frame(char *, int, tloe_frame_t *);
+int tloe_get_fsize(tl_msg_t *); 
 
 #endif // __TLOE_FRAME_H__

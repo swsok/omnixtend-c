@@ -31,7 +31,7 @@ int retransmit(tloe_endpoint_t *e, int seq_num) {
     return n;
 }
 
-void slide_window(tloe_endpoint_t *e, int last_seq_num) {
+void slide_window(tloe_endpoint_t *e, tloe_frame_t *tloeframe) {
     TloeEther *ether = (TloeEther *)e->fabric_ops.handle;
 	CircularQueue *retransmit_buffer = e->retransmit_buffer;
     RetransmitBufferElement *rbe;
@@ -40,7 +40,7 @@ void slide_window(tloe_endpoint_t *e, int last_seq_num) {
     // dequeue TLoE frames from the retransmit buffer
     rbe = (RetransmitBufferElement *) getfront(retransmit_buffer);
     while (rbe != NULL) {
-		int diff = tloe_seqnum_cmp(rbe->tloe_frame.header.seq_num, last_seq_num);
+		int diff = tloe_seqnum_cmp(rbe->tloe_frame.header.seq_num, tloeframe->header.seq_num_ack);
 	    if (diff > 0)
 		    break;
 
@@ -49,7 +49,7 @@ void slide_window(tloe_endpoint_t *e, int last_seq_num) {
 
 		// Increase credits of received ack for flow control
 		tloe_get_tlmsg(&(rbe->tloe_frame), &tlmsg, 0);
-		inc_credit(&(e->fc), tlmsg.header.chan, 1);
+		inc_credit(&(e->fc), tloeframe->header.chan, tloeframe->header.credit);
 		e->fc_inc_cnt++;
 
         if (rbe) free(rbe);

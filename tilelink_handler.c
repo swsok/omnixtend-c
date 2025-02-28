@@ -43,7 +43,7 @@ typedef void (*tl_handler_fn)(tloe_endpoint_t *e, tl_msg_t *tl);
 void handle_A_PUTFULLDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
     // Write data to memory
     int data_size = 1 << (tl->header.size);
-    int mem_offset = (tl->address) % MEM_SIZE;
+    int mem_offset = (tl->data[0]) % MEM_SIZE;
     memcpy(mem_storage + mem_offset, tl->data, data_size);
 
     // Make tilelink response(AccessAck) and set data
@@ -56,6 +56,7 @@ void handle_A_PUTFULLDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
 		e->drop_response_cnt++;
 		free(tlmsg);
     }
+    printf("%s Data received!\n", __func__);
 }
 
 void handle_A_GET_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
@@ -76,8 +77,14 @@ void handle_A_GET_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
 		free(tlmsg);
 	}
 
+    printf("%s Data received!\n", __func__);
     free(data);
 }
+
+void handle_D_ACCESSACKDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
+    printf("Result: \n");
+}
+
 
 static void handle_null_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
 }
@@ -135,14 +142,14 @@ tl_handler_fn tl_handler_table[CHANNEL_NUM][TL_OPCODE_NUM] = {
     },
 	// Channel D
     {
-        handle_debug_opcode,          // D_ACCESSACK
-        handle_null_opcode,           // D_ACCESSACKDATA
-        handle_debug_opcode,          // D_HINTACK
-        handle_debug_opcode,          // D_GRANT
-        handle_debug_opcode,          // D_GRANTDATA
-        handle_debug_opcode,          // D_RELEASEACK
-        handle_debug_opcode,          // NOT USED
-        handle_debug_opcode,          // NOT USED
+        handle_debug_opcode,            // D_ACCESSACK
+        handle_D_ACCESSACKDATA_opcode,  // D_ACCESSACKDATA
+        handle_debug_opcode,            // D_HINTACK
+        handle_debug_opcode,            // D_GRANT
+        handle_debug_opcode,            // D_GRANTDATA
+        handle_debug_opcode,            // D_RELEASEACK
+        handle_debug_opcode,            // NOT USED
+        handle_debug_opcode,            // NOT USED
     },
 	// Channel E
     {

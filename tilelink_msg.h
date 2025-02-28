@@ -51,24 +51,44 @@
 // Channel E
 #define E_GRANTACK              0  // Not required opcode
 
-typedef struct tilelink_header_struct {
-    uint8_t reserved1:1;
-    uint8_t chan:3;
-    uint8_t opcode:3;
-    uint8_t reserved2:1;
-    uint8_t param:4;
-    uint8_t size:4;
-    uint8_t domain:8;
-    uint16_t reserved;
+#if 0
+typedef struct __attribute__((packed,aligned(8))) {
     uint32_t source:26;
+    uint16_t reserved:12;
+    uint8_t err:2;
+    uint8_t domain:8;
+    uint8_t size:4;
+    uint8_t param:4;
+    uint8_t reserved2:1;
+    uint8_t opcode:3;
+    uint8_t chan:3;
+    uint8_t reserved1:1;
 } tl_header_t;
+#else
+typedef struct {
+    uint64_t source:26;
+    uint64_t reserved:12;
+    uint64_t err:2;
+    uint64_t domain:8;
+    uint64_t size:4;
+    uint64_t param:4;
+    uint64_t reserved2:1;
+    uint64_t opcode:3;
+    uint64_t chan:3;
+    uint64_t reserved1:1;
+} tl_header_t;
+#endif
 
 typedef struct {
     tl_header_t header;
+#if 0
     uint64_t address;      // 채널 A, B, C에서 사용
     uint64_t reserved1:38; // 채널 D에서 사용 (Grant)
-    uint32_t sink:26;      // 채널 D, E에서 사용
-    uint8_t data[];        // 가변 데이터 (AccessAckData, GrantData 등)
+    uint64_t sink:26;      // 채널 D, E에서 사용
+    uint8_t data[0];        // 가변 데이터 (AccessAckData, GrantData 등)
+#else
+    uint64_t data[0];
+#endif
 } tl_msg_t;
 
 typedef struct tilelink_message_abc_struct {
@@ -85,15 +105,15 @@ typedef struct tilelink_message_d_ack_struct {
 typedef struct tilelink_message_d_grant_struct {
     tl_header_t header;
     uint64_t reserved1:38;
-    uint32_t sink:26;
+    uint64_t sink:26;
     // Data
 } tl_msgDGrant_t;
 
 typedef struct tilelink_message_e_struct {
-    uint8_t reserved1:1;
-    uint8_t chan:3;
+    uint64_t reserved1:1;
+    uint64_t chan:3;
     uint64_t reserved2:34;
-    uint32_t sink:26;
+    uint64_t sink:26;
 } tl_msgE_t;
 
 

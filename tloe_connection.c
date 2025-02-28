@@ -20,14 +20,14 @@ static void serve_open_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
         // Set the ack to TLOE_ACK
         f->header.ack = TLOE_ACK;
         // Set the mask to indicate normal packet
-        tloe_set_mask(f, 0);
+        tloe_set_mask(f, 0, CONN_PACKET_SIZE);
         // Set 0 to channel and credit
         f->header.chan = recv_tloeframe->header.chan;
         f->header.credit = CREDIT_DEFAULT;
         // Convert tloe_frame into packet
-        tloe_frame_to_packet((tloe_frame_t *)f, send_buffer, sizeof(tloe_frame_t));
+        tloe_frame_to_packet((tloe_frame_t *)f, send_buffer, CONN_PACKET_SIZE);
         // Send the request_normal_frame using the ether
-        tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
+        tloe_fabric_send(e, send_buffer, CONN_PACKET_SIZE);
 
         // increase the sequence number of the endpoint
         e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
@@ -35,7 +35,7 @@ static void serve_open_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
         free(f);
 
         init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
-   }
+    }
     // Update sequence numbers
     e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->header.seq_num);
     e->acked_seq = recv_tloeframe->header.seq_num_ack;
@@ -57,7 +57,7 @@ static void serve_close_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
         // Set the ack to TLOE_ACK
         f->header.ack = TLOE_ACK;
         // Set the mask to indicate normal packet
-        tloe_set_mask(f, 0);
+        tloe_set_mask(f, 0, CONN_PACKET_SIZE);
         // Set 0 to channel and credit
         f->header.chan = 0;
         f->header.credit = 0;
@@ -78,63 +78,111 @@ static void serve_close_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
     e->acked_seq = recv_tloeframe->header.seq_num_ack;
 }
 
-void open_conn_master(tloe_endpoint_t *e) {
-    int size;
+static void send_conn_frame(tloe_endpoint_t *e) {
     char send_buffer[MAX_BUFFER_SIZE];
+
+    for (int i = 1; i < CHANNEL_NUM; i++) {
+        tloe_frame_t tloeframe;
+        memset(&tloeframe, 0, sizeof(tloeframe));
+
+        tloeframe.header.seq_num = i-1;
+        tloeframe.header.seq_num_ack = e->acked_seq;
+        tloeframe.header.type = (i == CHANNEL_A ? TYPE_OPEN_CONNECTION : TYPE_NORMAL);
+        tloeframe.header.ack = TLOE_ACK;
+        tloeframe.header.chan = i;
+        tloeframe.header.credit = CREDIT_DEFAULT;
+        tloe_set_mask(&tloeframe, 0, CONN_PACKET_SIZE);
+
+        // Convert tloe_frame into packet
+        tloe_frame_to_packet(&tloeframe, send_buffer, CONN_PACKET_SIZE);
+        tloe_fabric_send(e, send_buffer, CONN_PACKET_SIZE);
+    }
+}
+
+static int recv_conn_frame(tloe_endpoint_t *e) {
     char recv_buffer[MAX_BUFFER_SIZE];
+    char send_buffer[MAX_BUFFER_SIZE];
     tloe_frame_t recv_tloeframe;
+    int result = 0;
+    int size;
+    long elapsed_us;
     struct timespec ts, start, now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
 
     while (1) {
-        clock_gettime(CLOCK_MONOTONIC, &start);
+        size = tloe_fabric_recv(e, recv_buffer, sizeof(recv_buffer));
+        if (size >= 0) {
+            // Convert packet into tloe_frame
+            packet_to_tloe_frame(recv_buffer, size, &recv_tloeframe);
 
-        while (1) {
-            size = tloe_fabric_recv(e, recv_buffer, sizeof(recv_buffer));
-            if (size >= 0) {
-                // Convert packet into tloe_frame
-                packet_to_tloe_frame(recv_buffer, size, &recv_tloeframe);
-
-                if (is_conn_msg(&recv_tloeframe) == TYPE_OPEN_CONNECTION) {
-                    serve_open_conn(e, &recv_tloeframe);
-                }
+            if(tloe_seqnum_cmp(recv_tloeframe.header.seq_num, e->next_rx_seq) == 0) {
+                serve_open_conn(e, &recv_tloeframe);
             }
-
-            clock_gettime(CLOCK_MONOTONIC, &now);
-            long elapsed_us = (now.tv_sec - start.tv_sec) * 1000000L + (now.tv_nsec - start.tv_nsec) / 1000L;
-#if 0
-            if (elapsed_us >= TIMEOUT_TIME) {
-                break;
-            }
-#endif
-            usleep(100);
-        }
-
-        for (int i = 1; i < CHANNEL_NUM; i++) {
-            tloe_frame_t tloeframe;
-            memset(&tloeframe, 0, sizeof(tloeframe));
-
-            if (is_filled_credit(&(e->fc), i))
-                continue;
-
-            tloeframe.header.seq_num = e->next_tx_seq;
-            tloeframe.header.seq_num_ack = e->acked_seq;
-            tloeframe.header.type = TYPE_OPEN_CONNECTION;
-            tloeframe.header.chan = i;
-            tloeframe.header.credit = CREDIT_DEFAULT;
-            tloe_set_mask(&tloeframe, 0);
-
-            // Convert tloe_frame into packet
-            tloe_frame_to_packet(&tloeframe, send_buffer, sizeof(tloe_frame_t));
-            tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
-
-            e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
         }
 
         if (!check_all_channels(&(e->fc))) {
-            break;
+            tloe_frame_t tloeframe;
+            memset(&tloeframe, 0, sizeof(tloeframe));
+            e->next_tx_seq = CHANNEL_NUM - 1;
+
+            tloeframe.header.seq_num = e->next_tx_seq;
+            tloeframe.header.seq_num_ack = tloe_seqnum_prev(e->next_rx_seq);
+            tloeframe.header.type = TYPE_NORMAL;
+            tloeframe.header.ack = TLOE_ACK;
+
+            // Convert tloe_frame into packet
+            tloe_frame_to_packet(&tloeframe, send_buffer, CONN_PACKET_SIZE);
+            tloe_fabric_send(e, send_buffer, CONN_PACKET_SIZE);
+
+            e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
+
+            result = 1;
+            goto out;
+        }
+
+        elapsed_us = (now.tv_sec - start.tv_sec) * 1000000L + (now.tv_nsec - start.tv_nsec) / 1000L;
+
+        if (elapsed_us >= CONN_RESEND_TIME) {
+            goto out;
+        }
+        usleep(100);
+    }
+out:
+    return result;
+}
+
+static void wait_ackonly_frame(tloe_endpoint_t *e) {
+    int size;
+    char recv_buffer[MAX_BUFFER_SIZE];
+    tloe_frame_t recv_tloeframe;
+
+    while (1) {
+        size = tloe_fabric_recv(e, recv_buffer, sizeof(recv_buffer));
+        if (size >= 0) {
+            // Convert packet into tloe_frame
+            packet_to_tloe_frame(recv_buffer, size, &recv_tloeframe);
+            if (is_ackonly_frame(&recv_tloeframe))
+                e->next_rx_seq = recv_tloeframe.header.seq_num;
+                e->acked_seq = recv_tloeframe.header.seq_num_ack;
+                //TODO
+                break;
         }
     }
-    e->connection = 1;
+}
+
+int open_conn_master(tloe_endpoint_t *e) {
+    int is_done = 0;
+
+    while (!is_done) {
+        // Send open connetion to every channel
+        send_conn_frame(e);
+
+        // Receive until all channels are filled
+        is_done = recv_conn_frame(e);
+    }
+    wait_ackonly_frame(e);
+
+    return is_done;
 }
  
 void open_conn_slave(tloe_endpoint_t *e) {
@@ -200,7 +248,7 @@ void close_conn_master(tloe_endpoint_t *e) {
         tloeframe.header.type = TYPE_CLOSE_CONNECTION;
         tloeframe.header.chan = 0;
         tloeframe.header.credit = 0;
-        tloe_set_mask(&tloeframe, 0);
+        tloe_set_mask(&tloeframe, 0, size);
 
         // Convert tloe_frame into packet
         tloe_frame_to_packet(&tloeframe, send_buffer, sizeof(tloe_frame_t));

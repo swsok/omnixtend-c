@@ -188,6 +188,25 @@ static int create_and_enqueue_message(tloe_endpoint_t *e, int msg_index) {
     }
 }
 
+static int read_memory(tloe_endpoint_t *e, uint64_t addr) {
+    tl_msg_t *new_tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));
+    memset(new_tlmsg, 0, sizeof(tl_msg_t));
+
+    new_tlmsg->header.chan = CHANNEL_A;
+    new_tlmsg->header.opcode = A_GET_OPCODE;
+    new_tlmsg->data[0] = addr;
+
+    while(is_queue_full(e->message_buffer)) 
+        usleep(1000);
+
+    if (enqueue(e->message_buffer, new_tlmsg)) {
+        return 1;
+    } else {
+        free(new_tlmsg);
+        return 0;
+    }
+}
+
 static void print_credit_status(tloe_endpoint_t *e) {
     printf("Open connection is done. Credit %d | %d | %d | %d | %d\n",
         get_credit(&(e->fc), CHANNEL_A), get_credit(&(e->fc), CHANNEL_B),
@@ -195,35 +214,44 @@ static void print_credit_status(tloe_endpoint_t *e) {
         get_credit(&(e->fc), CHANNEL_E));
 }
 
-static int handle_user_input(tloe_endpoint_t *e, char input, int iter, 
-				int fabric_type, int master) {
+
+static int handle_user_input(tloe_endpoint_t *e, char input, int args1, 
+				int args2, int fabric_type, int master) {
     int ret = 0;
 
     if (input == 's') {
         print_endpoint_status(e);
     } else if (input == 'a') {
         if (!is_conn(e)) return 0;
-        for (int i = 0; i < iter; i++) {
+        for (int i = 0; i < args1; i++) {
             if (!create_and_enqueue_message(e, i)) {
                 break;  // Stop if buffer is full or allocation fails
             }
         }
     } else if (input == 'c') {
-#if 0
+        int is_conn = 0;
         if (e->master == TYPE_MASTER)
-            open_conn_master(e);
+            is_conn = open_conn_master(e);
         else if (e->master == TYPE_SLAVE)
             open_conn_slave(e);
-        printf("Open connection complete.\n");
-#else
-        e->connection = 1;
-#endif
+
+        if (is_conn) {
+            printf("Open connection complete.\n");
+            e->connection = 1;
+        }
     } else if (input == 'd') {
         if (e->master == TYPE_MASTER)
             close_conn_master(e);
         else if (e->master == TYPE_SLAVE)
             close_conn_slave(e);
         printf("Close connection complete.\n");
+    } else if (input == 'r') {
+        if (!is_conn(e)) return 0;
+        if (args1 == 0) return 0; 
+        if (args2 == 0) args2 = 1;
+        for (int i = 0; i < args2; i++) {
+            read_memory(e, (uint64_t) args1);
+        }
     } else if (input == 'q') {
         e->is_done = 1;
         printf("Exiting...\n");
@@ -321,7 +349,7 @@ int main(int argc, char *argv[]) {
     TloeEther *ether;
     char input, input_count[32];
     int master_slave;
-    int iter = 0;
+    int args1 = 0, args2 = 0;
     char dev_name[64] = {0};
     char dest_mac_addr[64] = {0};
     int fabric_type;
@@ -356,12 +384,12 @@ int main(int argc, char *argv[]) {
         printf("> ");
         fgets(input_count, sizeof(input_count), stdin);
 
-        if (sscanf(input_count, " %c %d", &input, &iter) < 1) {
+        if (sscanf(input_count, " %c %x %d", &input, &args1, &args2) < 1) {
             printf("Invalid input! Try again.\n");
             continue;
         }
 
-        if (handle_user_input(e, input, iter, fabric_type, master_slave))
+        if (handle_user_input(e, input, args1, args2, fabric_type, master_slave))
             break;
     }
 
