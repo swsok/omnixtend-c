@@ -21,7 +21,8 @@ static int enqueue_retransmit_buffer(tloe_endpoint_t *e, RetransmitBufferElement
 }
 
 static void prepare_normal_frame(tloe_endpoint_t *e, tloe_frame_t *f, tl_msg_t *tlmsg, int f_size) {
-        
+    int tl_size;
+
     // Update the sequence number
     f->header.seq_num = e->next_tx_seq;
     // Update the sequence number of the ack
@@ -29,10 +30,12 @@ static void prepare_normal_frame(tloe_endpoint_t *e, tloe_frame_t *f, tl_msg_t *
     // Set the ack to TLOE_ACK
     f->header.ack = TLOE_ACK;
     if (tlmsg) {
+        // TODO merge
+        tl_size = tloe_get_tlmsg_size(tlmsg); 
         // Set the mask to indicate normal packet
         tloe_set_mask(f, 1, f_size);
         // Set the tilelink msg
-        tloe_set_tlmsg(f, tlmsg, 0);
+        tloe_set_tlmsg(f, tlmsg, tl_size);
     } else {
         tloe_set_mask(f, 0, f_size);
     }
@@ -111,6 +114,10 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
     // Enqueue to retransmit buffer
     enqueued = enqueue_retransmit_buffer(e, rbe, f, tloeframe_size);
     BUG_ON(!enqueued, "failed to enqueue retransmit buffer element.");
+
+#if 0
+    print_payload((char *)f, tloeframe_size);
+#endif
 
     // Send normal frame
     // Send the request_normal_tlmsg

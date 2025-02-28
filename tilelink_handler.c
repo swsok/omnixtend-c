@@ -81,10 +81,18 @@ void handle_A_GET_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
     free(data);
 }
 
-void handle_D_ACCESSACKDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
-    printf("Result: \n");
+void handle_D_ACCESSACK_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
+    // Do nothing
 }
 
+void handle_D_ACCESSACKDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
+    uint64_t result = 0;
+    int size = (((1ULL << tl->header.size) + 7 ) / 8);
+
+    result = (uint64_t)tl->data[0];
+
+    printf("0x%lX\n", result);
+}
 
 static void handle_null_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
 }
@@ -142,7 +150,7 @@ tl_handler_fn tl_handler_table[CHANNEL_NUM][TL_OPCODE_NUM] = {
     },
 	// Channel D
     {
-        handle_debug_opcode,            // D_ACCESSACK
+        handle_D_ACCESSACK_opcode,      // D_ACCESSACK
         handle_D_ACCESSACKDATA_opcode,  // D_ACCESSACKDATA
         handle_debug_opcode,            // D_HINTACK
         handle_debug_opcode,            // D_GRANT

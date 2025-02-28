@@ -132,6 +132,9 @@ uint8_t tl_set_channel(tl_msg_t *tlmsg, uint8_t chan);
 uint8_t tl_get_credit(tl_msg_t *tlmsg);
 #endif
 
-int get_tlmsg_credit(tl_msg_t *tlmsg);
+int get_tlmsg_credit(tl_msg_t *);
+int tlmsg_get_chan(tl_msg_t *);
+int tlmsg_get_opcode(tl_msg_t *);
+int tlmsg_get_size(tl_msg_t *);
 
 #endif // __TILELINK_MSG_H__

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+
 #include "tloe_receiver.h"
 #include "tloe_frame.h"
 #include "tloe_endpoint.h"
@@ -27,9 +28,9 @@ static void send_ackonly_frame(tloe_endpoint_t *e, tloe_frame_t *recv_frame, int
     f.header.credit = 0;
 
     // Convert tloe_frame into packet
-    tloe_frame_to_packet((tloe_frame_t *)&f, send_buffer, sizeof(tloe_frame_t));
+    tloe_frame_to_packet((tloe_frame_t *)&f, send_buffer, size);
     // Send the request_normal_frame using the ether
-    tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
+    tloe_fabric_send(e, send_buffer, size);
 }
 
 static void serve_ack(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
@@ -54,61 +55,52 @@ static void serve_ack(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
     }
 }
 
-static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, int size) {
+static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, int f_size) {
     // printf("RX: Send pakcet to Tx channel for replying ACK/NAK with seq_num: %d, seq_num_ack: %d, ack: %d\n",
     //    tloeframe->header.seq_num, tloeframe->header.seq_num_ack, tloeframe->header.ack);
     // Handle TileLink Msg
-    int enqueued;
-    tloe_frame_t *tloeframe = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
-    memset((void *)tloeframe, 0, sizeof(tloe_frame_t));
+    int i, enqueued;
+    tl_msg_t *tlmsg;
 
-    //send_ackonly_frame(e, recv_tloeframe);
+    // Find tlmsgs from mask
+    uint64_t mask = tloe_get_mask(recv_tloeframe, f_size);
+    for (i = 0; i < 64; i++) {
+        if (mask & (1ULL << i)) {
+            // Extract tlmsg and enqueue into tl_msg_buffer
+            tlmsg = tloe_get_tlmsg(recv_tloeframe, i);
 
-    tl_msg_t *tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));
-    uint64_t frame_mask = recv_tloeframe->flits[(size >> 3) - 1 - 1];
-
-    // Check position from mask
-    int position = __builtin_ffs(frame_mask) - 1;
-    BUG_ON(position == -1, "wrong mask: -1");
-    tloe_get_tlmsg(recv_tloeframe, tlmsg, position);
-
-    // if tlmsg_buffer is full, send NAK 
-    // else send ACK
-    BUG_ON(is_queue_full(e->tl_msg_buffer), "tl_msg_buffer is full");
-
-#if 0
-    // Delayed ACK
-    if (e->timeout_rx.ack_pending == 0) {
-        e->timeout_rx.ack_pending = 1;
-        e->timeout_rx.ack_time = get_current_timestamp(&(e->iteration_ts));
+            if (!enqueue(e->tl_msg_buffer, (void *) tlmsg)) { 
+                fprintf(stderr, "tl_msg_buffer overflow.\n");
+                exit(1);
+            }
+        }
     }
-    e->timeout_rx.last_ack_seq = recv_tloeframe->header.seq_num;
-#else
+
     e->timeout_rx.ack_time = get_current_timestamp(&(e->iteration_ts));
     e->timeout_rx.last_ack_seq = recv_tloeframe->header.seq_num;
-#endif
 
-    // Enqueue to tl_msg_buffer for processing TileLink message if not NAK
     // Update sequence numbers
     e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->header.seq_num);
     e->acked_seq = recv_tloeframe->header.seq_num_ack;
     e->timeout_rx.last_channel = tlmsg->header.chan;
     e->timeout_rx.last_credit = get_tlmsg_credit(tlmsg);
 
-#if 0
-    if (!enqueue(e->tl_msg_buffer, (void *) tlmsg)) { 
-        fprintf(stderr, "tl_msg_buffer overflow.\n");
-        exit(1);
-    }
-#endif
-
-#if 1
+#if 1   // TODO Check the result of normal packet need to enqueue ack buffer
+        // it should response with credit or memory node cannot update credit
     // Sending ACK frame
+    tloe_frame_t *tloeframe = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
+    memset((void *)tloeframe, 0, sizeof(tloe_frame_t));
+
     tloeframe->header.seq_num_ack = tloe_seqnum_prev(e->next_rx_seq);
     tloeframe->header.ack = TLOE_ACK;  // ACK
-    tloe_set_mask(tloeframe, 0, size);
-    tloeframe->header.chan = CHANNEL_D;       // TODO
-    tloeframe->header.credit = 2;             // TODO 
+    tloe_set_mask(tloeframe, 0, f_size);
+#if 0
+    tloeframe->header.chan = recv_tloeframe->header.chan;
+    tloeframe->header.credit = recv_tloeframe->header.credit; 
+#else
+    tloeframe->header.chan = CHANNEL_D;
+    tloeframe->header.credit = 1; 
+#endif
     enqueued = enqueue(e->ack_buffer, (void *) tloeframe);
     BUG_ON(!enqueued, "failed to enqueue ack frame.");
 #endif
@@ -183,43 +175,6 @@ static void enqueue_ack_frame(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) 
     e->delay_cnt--;
 }
 
-void print_payload(char *data, int size) {
-    int i, j;
-
-    printf("\n");
-    for (i = 0; i < size; i++) {
-        if (i != 0 && i % 16 == 0) {
-            printf("\t");
-            for (j = i - 16; j < i; j++) {
-                if (data[j] >= 32 && data[j] < 128)
-                    printf("%c", (unsigned char)data[j]);
-                else
-                    printf(".");
-            }
-            printf("\n");
-        }
-
-        if ( (i % 8) == 0 && (i % 16) != 0 ) printf(" ");
-        printf(" %02X", (unsigned char) data[i]);       // print DATA
-
-        if (i == size - 1) {
-            for (j = 0; j < (15 - (i % 16)); j++)
-                printf("   ");
-
-            printf("\t");
-
-            for (j = (i - (i % 16)); j <= i; j++) {
-                if (data[j] >= 32 && data[j] < 128)
-                    printf("%c", (unsigned char) data[j]);
-                else
-                    printf(".");
-            }
-            printf("\n");
-        }
-    }
-    printf("\n");
-}
-
 void RX(tloe_endpoint_t *e) {
     int size;
     chan_credit_t chan_credit;
@@ -261,7 +216,7 @@ void RX(tloe_endpoint_t *e) {
 
         // TODO move TX or delayed ack??
         // Send ACKONLY msg
-        printf("send zero-tl frame");
+        fprintf(stderr, "Send zero-tl frame\n");
         send_ackonly_frame(e, recv_tloeframe, size);
 
         free(recv_tloeframe);

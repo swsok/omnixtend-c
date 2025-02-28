@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include "tloe_frame.h"
 #include "tloe_common.h"
+#include "tilelink_msg.h"
 
 void set_tloe_frame(tloe_frame_t *tloeframe, tl_msg_t *tlmsg, uint32_t seq_num, uint32_t seq_num_ack, uint8_t ack, uint8_t chan, uint8_t credit) {
     tloeframe->header.seq_num = seq_num;
@@ -40,7 +41,7 @@ int tloe_get_ack(tloe_frame_t *frame) {
     return frame->header.ack;
 }
 
-int tloe_set_mask(tloe_frame_t *frame, int mask, int size) {
+uint64_t tloe_set_mask(tloe_frame_t *frame, int mask, int size) {
 #if 0
     frame->flits[MAX_SIZE_FLIT-1] = mask;
     return mask;
@@ -49,7 +50,7 @@ int tloe_set_mask(tloe_frame_t *frame, int mask, int size) {
     return mask;
 }
 
-int tloe_get_mask(tloe_frame_t *frame, int size) {
+uint64_t tloe_get_mask(tloe_frame_t *frame, int size) {
 #if 0
     return frame->flits[MAX_SIZE_FLIT-1];
 #endif
@@ -61,47 +62,72 @@ int tloe_get_fsize(tl_msg_t *tlmsg) {
     if (tlmsg->header.chan == CHANNEL_A && tlmsg->header.opcode == A_GET_OPCODE)
         return sizeof(uint64_t) * 7;
     else if (tlmsg->header.chan == CHANNEL_A && tlmsg->header.opcode == A_PUTFULLDATA_OPCODE)
-        return sizeof(uint64_t) * 4 + 2 << tlmsg->header.size;
-}
-
-void tloe_get_tlmsg(tloe_frame_t *frame, tl_msg_t *tlmsg, int loc) {
-    int value_count = 0;
-    int stop_flag = 0;
-    int index = 0;
-    
-    // Calculate size
-    for (int i=0; i<loc-1; i++) {
-        for (int j=frame->flits[i]; j<frame->flits[i+1]; j++) {
-            if (j == 0) {
-                stop_flag = 1;
-                break;
-            }
-        value_count++;
-        if (stop_flag) break;
-    }
-
-    // Put data into tlmsg
-    size_t total_size = sizeof(tl_msg_t) + (value_count * sizeof(uint64_t));
-    tlmsg = (tl_msg_t *)realloc(tlmsg, total_size);
-    BUG_ON(!tlmsg, "realloc failed");
-
-    for (int i=0; i<loc-1; i++)
-        for (int j=frame->flits[i]; j<frame->flits[i+1]; j++) {
-            if (j == 0) {
-                stop_flag = 1;
-                break;
-            }
-            tlmsg->data[index++] = j;
-        }
-        if (stop_flag) break;
-    }
 #if 0
-	smemcpy(tlmsg, &frame->flits[loc], sizeof(uint64_t));
+        return sizeof(uint64_t) * 7 + (((1ULL << tlmsg->header.size) + 7 ) / 8);
+#else
+        return sizeof(uint64_t) * 7;
 #endif
 }
 
-void tloe_set_tlmsg(tloe_frame_t *frame, tl_msg_t *tlmsg, int loc) {
-	memcpy(&frame->flits[loc], tlmsg, sizeof(uint64_t));
+tl_msg_t *tloe_get_tlmsg(tloe_frame_t *frame, int tl_loc) {
+    int data_size;
+    int tlmsg_chan, tlmsg_opcode, tlmsg_size;
+    tl_msg_t *tlmsg;
+
+    // Put data into tlmsg
+    tl_header_t *tlheader = (tl_header_t*) &frame->flits[tl_loc];
+    tlmsg_chan = tlheader->chan;
+    tlmsg_opcode = tlheader->opcode;
+    tlmsg_size = tlheader->size;
+
+    // calculate size of data
+    switch (tlmsg_chan) {
+        case CHANNEL_A:
+            if (tlmsg_opcode == A_GET_OPCODE) 
+                data_size = 1;
+            else if (tlmsg_opcode == A_PUTFULLDATA_OPCODE) 
+                data_size = 1 + (((1ULL << tlmsg_size) + 7 ) / 8);
+            break;
+        case CHANNEL_D:
+            if (tlmsg_opcode == D_ACCESSACK_OPCODE)
+                data_size = 0;
+            else if (tlmsg_opcode == D_ACCESSACKDATA_OPCODE) 
+                data_size = 1 + (((1ULL << tlmsg_size) + 7 ) / 8);
+            break;
+    }
+
+    size_t total_size = sizeof(tl_msg_t) + (data_size * sizeof(uint64_t));
+    tlmsg = (tl_msg_t *)malloc(total_size);
+    BUG_ON(!tlmsg, "malloc failed");
+
+    memcpy(tlmsg, &frame->flits[tl_loc], total_size);
+
+    return tlmsg;
+}
+
+int tloe_get_tlmsg_size(tl_msg_t *tlmsg) {
+    int data_size;
+
+    switch (tlmsg->header.chan) {
+        case CHANNEL_A:
+            if (tlmsg->header.opcode == A_GET_OPCODE) 
+                data_size = 1;
+            else if (tlmsg->header.opcode == A_PUTFULLDATA_OPCODE) 
+                data_size = 1 + (((1ULL << tlmsg->header.size) + 7 ) / 8);
+            break;
+        case CHANNEL_D:
+            if (tlmsg->header.opcode == D_ACCESSACK_OPCODE)
+                data_size = 0;
+            else if (tlmsg->header.opcode == D_ACCESSACKDATA_OPCODE) 
+                data_size = 1 + (((1ULL << tlmsg->header.size) + 7 ) / 8);
+            break;
+    }
+
+    return data_size;
+}
+
+void tloe_set_tlmsg(tloe_frame_t *frame, tl_msg_t *tlmsg, int tl_size) {
+	memcpy(&frame->flits[0], tlmsg, sizeof(uint64_t) + sizeof(uint64_t) * tl_size);
 }
 
 int is_zero_tl_frame(tloe_frame_t *frame, int size) {

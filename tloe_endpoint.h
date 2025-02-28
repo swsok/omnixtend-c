@@ -102,4 +102,42 @@ static inline tloe_rx_req_type_t tloe_rx_get_req_type(tloe_endpoint_t *e, tloe_f
 		return REQ_DUPLICATE;
 	return REQ_OOS;
 }
+
+static inline void print_payload(char *data, int size) {
+    int i, j;
+
+    printf("\n");
+    for (i = 0; i < size; i++) {
+        if (i != 0 && i % 16 == 0) {
+            printf("\t");
+            for (j = i - 16; j < i; j++) {
+                if (data[j] >= 32 && data[j] < 128)
+                    printf("%c", (unsigned char)data[j]);
+                else
+                    printf(".");
+            }
+            printf("\n");
+        }
+
+        if ( (i % 8) == 0 && (i % 16) != 0 ) printf(" ");
+        printf(" %02X", (unsigned char) data[i]);       // print DATA
+
+        if (i == size - 1) {
+            for (j = 0; j < (15 - (i % 16)); j++)
+                printf("   ");
+
+            printf("\t");
+
+            for (j = (i - (i % 16)); j <= i; j++) {
+                if (data[j] >= 32 && data[j] < 128)
+                    printf("%c", (unsigned char) data[j]);
+                else
+                    printf(".");
+            }
+            printf("\n");
+        }
+    }
+    printf("\n");
+}
+
 #endif // __TLOE_ENDPOINT_H__

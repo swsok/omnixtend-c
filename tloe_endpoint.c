@@ -144,7 +144,7 @@ void *tloe_endpoint(void *arg) {
 static void print_endpoint_status(tloe_endpoint_t *e) {
     printf("-----------------------------------------------------\n"
            "Sequence Numbers:\n"
-           " TX: %d, RX: %d\n"
+           " TX: %d(0x%x), RX: %d(0x%x)\n"
            "\nPacket Statistics:\n"
            " ACK: %d, Duplicate: %d, Out-of-Sequence: %d\n"
            " Delayed: %d, Dropped: %d (Normal: %d, ACK: %d)\n"
@@ -154,7 +154,7 @@ static void print_endpoint_status(tloe_endpoint_t *e) {
            "\nBuffer Drops:\n"
            " TL Messages: %d, Responses: %d\n"
            "-----------------------------------------------------\n",
-           e->next_tx_seq, e->next_rx_seq,
+           e->next_tx_seq, e->next_tx_seq, e->next_rx_seq, e->next_rx_seq,
            e->ack_cnt, e->dup_cnt, e->oos_cnt,
            e->delay_cnt, e->drop_cnt, e->drop_npacket_cnt, e->drop_apacket_cnt,
 	   e->next_rx_seq-e->delay_cnt+e->oos_cnt+e->dup_cnt-e->drop_apacket_cnt,
@@ -189,12 +189,34 @@ static int create_and_enqueue_message(tloe_endpoint_t *e, int msg_index) {
 }
 
 static int read_memory(tloe_endpoint_t *e, uint64_t addr) {
-    tl_msg_t *new_tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));
+    tl_msg_t *new_tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t) + sizeof(uint64_t) * 1);
     memset(new_tlmsg, 0, sizeof(tl_msg_t));
 
     new_tlmsg->header.chan = CHANNEL_A;
     new_tlmsg->header.opcode = A_GET_OPCODE;
     new_tlmsg->data[0] = addr;
+    new_tlmsg->header.size = 3;     //TODO 8byte for test
+
+    while(is_queue_full(e->message_buffer)) 
+        usleep(1000);
+
+    if (enqueue(e->message_buffer, new_tlmsg)) {
+        return 1;
+    } else {
+        free(new_tlmsg);
+        return 0;
+    }
+}
+
+static int write_memory(tloe_endpoint_t *e, uint64_t addr, uint64_t value) {
+    tl_msg_t *new_tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t) + sizeof(uint64_t) * 2);
+    memset(new_tlmsg, 0, sizeof(tl_msg_t));
+
+    new_tlmsg->header.chan = CHANNEL_A;
+    new_tlmsg->header.opcode = A_PUTFULLDATA_OPCODE;
+    new_tlmsg->header.size = 3;     //TODO 8byte for test
+    new_tlmsg->data[0] = addr;
+    new_tlmsg->data[1] = value;
 
     while(is_queue_full(e->message_buffer)) 
         usleep(1000);
@@ -251,6 +273,20 @@ static int handle_user_input(tloe_endpoint_t *e, char input, int args1,
         if (args2 == 0) args2 = 1;
         for (int i = 0; i < args2; i++) {
             read_memory(e, (uint64_t) args1);
+        }
+    } else if (input == 'w') {
+        if (!is_conn(e)) return 0;
+        if (args1 == 0) return 0; 
+        if (args2 == 0) return 0;
+
+        write_memory(e, (uint64_t) args1, (uint64_t) args2);
+    } else if (input == 't') {
+        if (!is_conn(e)) return 0;
+        for (int i = 0; i < args1; i++) {
+            uint64_t addr = 0x1000 + 0x1000*i;
+            uint64_t value = 0x1000 + i;
+            write_memory(e, addr, value);
+            read_memory(e, addr);
         }
     } else if (input == 'q') {
         e->is_done = 1;
@@ -384,13 +420,15 @@ int main(int argc, char *argv[]) {
         printf("> ");
         fgets(input_count, sizeof(input_count), stdin);
 
-        if (sscanf(input_count, " %c %x %d", &input, &args1, &args2) < 1) {
+        if (sscanf(input_count, " %c %x %x", &input, &args1, &args2) < 1) {
             printf("Invalid input! Try again.\n");
             continue;
         }
 
         if (handle_user_input(e, input, args1, args2, fabric_type, master_slave))
             break;
+
+        args1 = args2 = 0;
     }
 
     tloe_endpoint_close(e);
