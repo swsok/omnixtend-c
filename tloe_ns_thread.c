@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <mqueue.h>
+#include <unistd.h>
 
 #define BUFFER_SIZE 1024
 #define MAX_QUEUE_NAME 64
@@ -57,7 +58,8 @@ static void thread_close(void)
 static void *thread_fn(void *arg)
 {
     char buffer[BUFFER_SIZE];
-    ssize_t recv_size;
+    ssize_t recv_size_port_a;
+    ssize_t recv_size_port_b;
     const char *queue_name = (const char *)arg;
 
     if (thread_init(queue_name) < 0) {
@@ -67,16 +69,28 @@ static void *thread_fn(void *arg)
 
     while (!is_done) {
         // Relay messages from port A to port B
-        recv_size = tloe_mq_recv(ep_port_a, buffer, BUFFER_SIZE);
-        if (recv_size > 0) {
-            tloe_mq_send(ep_port_b, buffer, recv_size);
+        recv_size_port_a = tloe_mq_recv(ep_port_a, buffer, BUFFER_SIZE);
+        if (recv_size_port_a > 0) {
+            // if destination port is full, drop the message
+            if (tloe_mq_send(ep_port_b, buffer, recv_size_port_a) < 0) {
+                fprintf(stderr, "Dropped message of size %zd\n",
+                        recv_size_port_a);
+            }
         }
 
         // Relay messages from port B to port A
-        recv_size = tloe_mq_recv(ep_port_b, buffer, BUFFER_SIZE);
-        if (recv_size > 0) {
-            tloe_mq_send(ep_port_a, buffer, recv_size);
+        recv_size_port_b = tloe_mq_recv(ep_port_b, buffer, BUFFER_SIZE);
+        if (recv_size_port_b > 0) {
+            // if destination port is full, drop the message
+            if (tloe_mq_send(ep_port_a, buffer, recv_size_port_b) < 0) {
+                fprintf(stderr, "Dropped message of size %zd\n",
+                        recv_size_port_b);
+            }
         }
+
+        // If no messages are received, sleep for 1ms
+        if (recv_size_port_a + recv_size_port_b < 0)
+            usleep(1000);
     }
 
     thread_close();
