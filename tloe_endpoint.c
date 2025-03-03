@@ -424,7 +424,7 @@ int main(int argc, char *argv[]) {
     tloe_fabric_init(e, fabric_type);
 
     // intead of a direct call to tloe_ether_open
-    tloe_fabric_open(e, dev_name, dest_mac_addr);
+    tloe_fabric_open(e, dev_name, dest_mac_addr, 0);
 
     if (pthread_create(&(e->tloe_endpoint_thread), NULL, tloe_endpoint, e) != 0) {
         error_exit("Failed to create tloe endpoint thread");

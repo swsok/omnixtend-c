@@ -29,7 +29,7 @@ typedef struct tloe_ether_ {
 
 size_t tloe_ether_send(TloeEther *, char *, size_t);
 size_t tloe_ether_recv(TloeEther *, char *, size_t);
-TloeEther *tloe_ether_open(char *, char *);
+TloeEther *tloe_ether_open(char *, char *, int);
 void tloe_ether_close(TloeEther *);
 
 #endif // __TLOE_ETHER_H__

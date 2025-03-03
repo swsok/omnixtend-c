@@ -128,7 +128,7 @@ static TloeEther *tloe_ether_alloc_and_init(uint8_t dest_mac[ETHER_ADDR_LEN], ui
     return ether;
 }
 
-TloeEther *tloe_ether_open(char *ifname, char *dest_mac_str) {
+TloeEther *tloe_ether_open(char *ifname, char *dest_mac_str, int create_queue) {
     TloeEther *ether;
     int sockfd;
     struct ifreq ifr;
