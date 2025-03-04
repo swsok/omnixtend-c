@@ -165,10 +165,10 @@ static void print_endpoint_status(tloe_endpoint_t *e) {
             e->accessack_cnt, e->accessackdata_cnt); 
 }
 
-static int create_and_enqueue_message(tloe_endpoint_t *e, int msg_index) {
+static int create_and_enqueue_message(tloe_endpoint_t *e, uint64_t msg_index) {
     tl_msg_t *new_tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));
     if (!new_tlmsg) {
-        printf("Memory allocation failed at packet %d!\n", msg_index);
+        printf("Memory allocation failed at packet %ld!\n", msg_index);
         return 0;
     }
     memset((void *) new_tlmsg, 0, sizeof(tl_msg_t));
@@ -182,7 +182,7 @@ static int create_and_enqueue_message(tloe_endpoint_t *e, int msg_index) {
 
     if (enqueue(e->message_buffer, new_tlmsg)) {
         if (msg_index % 100 == 0)
-            fprintf(stderr, "Packet %d added to message_buffer\n", msg_index);
+            fprintf(stderr, "Packet %ld added to message_buffer\n", msg_index);
         return 1;
     } else {
         free(new_tlmsg);
@@ -238,8 +238,7 @@ static void print_credit_status(tloe_endpoint_t *e) {
         get_credit(&(e->fc), CHANNEL_E));
 }
 
-
-static int handle_user_input(tloe_endpoint_t *e, char input, int args1, 
+static int handle_user_input(tloe_endpoint_t *e, char input, uint64_t args1, 
 				int args2, int args3, int fabric_type, int master) {
     int ret = 0;
 
@@ -247,7 +246,7 @@ static int handle_user_input(tloe_endpoint_t *e, char input, int args1,
         print_endpoint_status(e);
     } else if (input == 'a') {
         if (!is_conn(e)) return 0;
-        for (int i = 0; i < args1; i++) {
+        for (uint64_t i = 0; i < args1; i++) {
             if (!create_and_enqueue_message(e, i)) {
                 break;  // Stop if buffer is full or allocation fails
             }
@@ -399,7 +398,8 @@ int main(int argc, char *argv[]) {
     TloeEther *ether;
     char input, input_count[32];
     int master_slave;
-    int args1 = 0, args2 = 0, args3 = 0;
+    uint64_t args1 = 0;
+    int args2 = 0, args3 = 0;
     char dev_name[64] = {0};
     char dest_mac_addr[64] = {0};
     int fabric_type;
@@ -435,7 +435,7 @@ int main(int argc, char *argv[]) {
         printf("> ");
         fgets(input_count, sizeof(input_count), stdin);
 
-        if (sscanf(input_count, " %c %x %x %x", &input, &args1, &args2, &args3) < 1) {
+        if (sscanf(input_count, " %c %lx %x %x", &input, &args1, &args2, &args3) < 1) {
             printf("Invalid input! Try again.\n");
             continue;
         }
