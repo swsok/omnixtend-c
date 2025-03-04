@@ -13,6 +13,7 @@ static int enqueue_retransmit_buffer(tloe_endpoint_t *e, RetransmitBufferElement
     memcpy(&rbe->tloe_frame, f, f_size);
     // Set the state to TLOE_INIT
     rbe->state = TLOE_INIT;
+    rbe->f_size = f_size;
     // Get the current time
     //rbe->send_time = is_zero_tl_frame(f) ? get_current_timestamp(&(e->iteration_ts)) : 0;
     rbe->send_time = get_current_timestamp(&(e->iteration_ts));
@@ -54,11 +55,11 @@ static void send_request_normal_frame(tloe_endpoint_t *e, tloe_frame_t *f, int f
 }
 
 tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
-    int enqueued;
     tl_msg_t *return_tlmsg = NULL;
     RetransmitBufferElement *rbe;
     char send_buffer[MAX_BUFFER_SIZE];
     int tloeframe_size = 0;
+    int enqueued;
 
 	if (is_queue_full(e->retransmit_buffer)) {
 		return_tlmsg = request_normal_tlmsg;
@@ -71,7 +72,13 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 
     if (request_normal_tlmsg) {
         // Handle credit
-        if (dec_credit(&(e->fc), request_normal_tlmsg->header.chan, 1) == 0) {
+        // TODO
+#if 0
+        if (dec_credit(&(e->fc), request_normal_tlmsg->header.chan, 
+                tloe_get_tlmsg_size(request_normal_tlmsg)) == 0) {
+#else
+        if (credit_dec(&(e->fc), request_normal_tlmsg) == 0) {
+#endif
             return_tlmsg = request_normal_tlmsg;
             goto out;
         } else {
@@ -113,6 +120,7 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 
     // Enqueue to retransmit buffer
     enqueued = enqueue_retransmit_buffer(e, rbe, f, tloeframe_size);
+//    printf("enqueue retransmit buffer : %d, %ld\n", f->header.seq_num, f->flits[0]);
     BUG_ON(!enqueued, "failed to enqueue retransmit buffer element.");
 
 #if 0

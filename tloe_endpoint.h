@@ -59,6 +59,9 @@ typedef struct tloe_endpoint_struct {
 	int drop_tlmsg_cnt;
 	int drop_response_cnt;
 
+    int accessack_cnt;
+    int accessackdata_cnt;
+
     int close_flag;
 } tloe_endpoint_t;
 

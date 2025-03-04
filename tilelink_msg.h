@@ -51,20 +51,6 @@
 // Channel E
 #define E_GRANTACK              0  // Not required opcode
 
-#if 0
-typedef struct __attribute__((packed,aligned(8))) {
-    uint32_t source:26;
-    uint16_t reserved:12;
-    uint8_t err:2;
-    uint8_t domain:8;
-    uint8_t size:4;
-    uint8_t param:4;
-    uint8_t reserved2:1;
-    uint8_t opcode:3;
-    uint8_t chan:3;
-    uint8_t reserved1:1;
-} tl_header_t;
-#else
 typedef struct {
     uint64_t source:26;
     uint64_t reserved:12;
@@ -77,7 +63,6 @@ typedef struct {
     uint64_t chan:3;
     uint64_t reserved1:1;
 } tl_header_t;
-#endif
 
 typedef struct {
     tl_header_t header;

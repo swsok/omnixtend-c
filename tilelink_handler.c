@@ -82,7 +82,8 @@ void handle_A_GET_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
 }
 
 void handle_D_ACCESSACK_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
-    // Do nothing
+    // Do nothing TODO
+    e->accessack_cnt++;
 }
 
 void handle_D_ACCESSACKDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
@@ -92,6 +93,8 @@ void handle_D_ACCESSACKDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
     result = (uint64_t)tl->data[0];
 
     printf("0x%lX\n", result);
+
+    e->accessackdata_cnt++;
 }
 
 static void handle_null_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
