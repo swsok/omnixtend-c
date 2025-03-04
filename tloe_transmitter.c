@@ -61,8 +61,8 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
     int tloeframe_size = 0;
     int enqueued;
 
-	if (is_queue_full(e->retransmit_buffer)) {
-		return_tlmsg = request_normal_tlmsg;
+    if (is_queue_full(e->retransmit_buffer)) {
+        return_tlmsg = request_normal_tlmsg;
         goto out;
     }
 
@@ -71,14 +71,8 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
     }
 
     if (request_normal_tlmsg) {
-        // Handle credit
-        // TODO
-#if 0
-        if (dec_credit(&(e->fc), request_normal_tlmsg->header.chan, 
-                tloe_get_tlmsg_size(request_normal_tlmsg)) == 0) {
-#else
+        // Decrease credit based on the tilelink message
         if (credit_dec(&(e->fc), request_normal_tlmsg) == 0) {
-#endif
             return_tlmsg = request_normal_tlmsg;
             goto out;
         } else {
@@ -120,7 +114,7 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 
     // Enqueue to retransmit buffer
     enqueued = enqueue_retransmit_buffer(e, rbe, f, tloeframe_size);
-//    printf("enqueue retransmit buffer : %d, %ld\n", f->header.seq_num, f->flits[0]);
+    //    printf("enqueue retransmit buffer : %d, %ld\n", f->header.seq_num, f->flits[0]);
     BUG_ON(!enqueued, "failed to enqueue retransmit buffer element.");
 
 #if 0
@@ -137,11 +131,10 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
     e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
 
 out:
-	// Retransmit all the elements in the retransmit buffer if the timeout has occurred
-//	if ((rbe = get_earliest_element(e->retransmit_buffer)) && is_timeout_tx(&(e->iteration_ts), rbe->send_time)) {
-	if ((rbe = getfront(e->retransmit_buffer)) && is_timeout_tx(&(e->iteration_ts), rbe->send_time)) {
-		fprintf(stderr, "TX: Timeout TX and retranmission from seq_num: %d\n", rbe->tloe_frame.header.seq_num);
-		retransmit(e, rbe->tloe_frame.header.seq_num);
-	}
-	return return_tlmsg;
+    // Retransmit all the elements in the retransmit buffer if the timeout has occurred
+    if ((rbe = getfront(e->retransmit_buffer)) && is_timeout_tx(&(e->iteration_ts), rbe->send_time)) {
+        fprintf(stderr, "TX: Timeout TX and retranmission from seq_num: %d\n", rbe->tloe_frame.header.seq_num);
+        retransmit(e, rbe->tloe_frame.header.seq_num);
+    }
+    return return_tlmsg;
 }

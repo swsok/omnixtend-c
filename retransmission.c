@@ -18,12 +18,11 @@ int retransmit(tloe_endpoint_t *e, int seq_num) {
 
         frame = element->tloe_frame;
         frame.header.seq_num_ack = e->acked_seq;
-//        tloe_set_mask(&frame, 1);		// Indicate to normal packet
 
         fprintf(stderr, "Retransmission with num_seq: %d\n", frame.header.seq_num);
         // Convert tloe_frame into packet
         tloe_frame_to_packet((tloe_frame_t *)&frame, send_buffer, element->f_size);
-    	tloe_fabric_send(e, send_buffer, element->f_size);
+        tloe_fabric_send(e, send_buffer, element->f_size);
 
         element->state = TLOE_RESENT;
         element->send_time = get_current_timestamp(&(e->iteration_ts));
@@ -31,7 +30,6 @@ int retransmit(tloe_endpoint_t *e, int seq_num) {
     return n;
 }
 
-static int sw_cnt = 0;
 void slide_window(tloe_endpoint_t *e, tloe_frame_t *tloeframe) {
     TloeEther *ether = (TloeEther *)e->fabric_ops.handle;
     CircularQueue *retransmit_buffer = e->retransmit_buffer;
@@ -44,6 +42,8 @@ void slide_window(tloe_endpoint_t *e, tloe_frame_t *tloeframe) {
         if (diff > 0)
             break;
 
+        // TODO tlmsg is present and should be processed, but it must not be handled as an ACKONLY frame.  
+        // Before dequeue. (ACKONLY frames do not contain credit).  
         if (rbe->tloe_frame.flits[0] && tloeframe->header.type == TYPE_ACKONLY)
             break;
 
@@ -51,29 +51,12 @@ void slide_window(tloe_endpoint_t *e, tloe_frame_t *tloeframe) {
         //printf("RX: frame.last_seq_num: %d, element->seq_num: %d\n", last_seq_num, e->tloe_frame.seq_num);
 
         // Increase credits of received ack for flow control
-#if 0
-        credit_inc(&(e->fc), tloeframe->header.chan, (1 << tloeframe->header.credit));
-
-        //fprintf(stderr, "Increase credit- chan: %d, credit: %d\n", tloeframe->header.chan, (1 << tloeframe->header.credit));
-        if (tloeframe->header.chan != 0) e->fc_inc_cnt++;
-#else
+        // TODO Need to verify whether credit processing should be based on tlmsg in the retransmission_buffer
         if (rbe->tloe_frame.flits[0]) {
-            // TODO checking ACKONLY frame 
 
-            credit_inc(&(e->fc), tloeframe->header.chan, (1 << tloeframe->header.credit));
+            credit_inc(&(e->fc), (tl_msg_t*)&rbe->tloe_frame.flits[0]);
             e->fc_inc_cnt++;
-
-#if 1
-            if (tloeframe->header.credit != 1)
-                printf("PPPPPP\n");
-#endif
         }
-#endif
-
-#if 0
-        printf("sw_cnt: %d, %d, %d | %d\n", sw_cnt++, tloeframe->header.chan, tloeframe->header.credit, e->next_tx_seq);
-        printf("%d,,,, %d\n", rbe->tloe_frame.header.seq_num, tloeframe->header.seq_num_ack);
-#endif
 
         if (rbe) free(rbe);
         rbe = (RetransmitBufferElement *) getfront(retransmit_buffer);

@@ -152,7 +152,7 @@ static void print_endpoint_status(tloe_endpoint_t *e) {
             " ACK: %d, Duplicate: %d, Out-of-Sequence: %d\n"
             " Delayed: %d, Dropped: %d (Normal: %d, ACK: %d)\n"
             " Estimated ACK on the other side: %d\n"
-            "Channel Credits [A|B|C|D|E]: %d|%d|%d|%d|%d\n"
+            "Channel Credits [0|A|B|C|D|E]: %d|%d|%d|%d|%d|%d\n"
             " Flow Control (Inc/Dec): %d/%d\n"
             "\nBuffer Drops:\n"
             " TL Messages: %d, Responses: %d\n"
@@ -162,7 +162,7 @@ static void print_endpoint_status(tloe_endpoint_t *e) {
             e->ack_cnt, e->dup_cnt, e->oos_cnt,
             e->delay_cnt, e->drop_cnt, e->drop_npacket_cnt, e->drop_apacket_cnt,
             e->next_rx_seq-e->delay_cnt+e->oos_cnt+e->dup_cnt-e->drop_apacket_cnt,
-            e->fc.credits[CHANNEL_A], e->fc.credits[CHANNEL_B], 
+            e->fc.credits[0], e->fc.credits[CHANNEL_A], e->fc.credits[CHANNEL_B], 
             e->fc.credits[CHANNEL_C], e->fc.credits[CHANNEL_D], 
             e->fc.credits[CHANNEL_E], e->fc_inc_cnt, e->fc_dec_cnt,
             e->drop_tlmsg_cnt, e->drop_response_cnt,

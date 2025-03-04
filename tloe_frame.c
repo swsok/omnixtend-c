@@ -42,23 +42,16 @@ int tloe_get_ack(tloe_frame_t *frame) {
 }
 
 uint64_t tloe_set_mask(tloe_frame_t *frame, int mask, int size) {
-#if 0
-    frame->flits[MAX_SIZE_FLIT-1] = mask;
-    return mask;
-#endif
     frame->flits[(size >> 3) - 1 - 1] = mask;
     return mask;
 }
 
 uint64_t tloe_get_mask(tloe_frame_t *frame, int size) {
-#if 0
-    return frame->flits[MAX_SIZE_FLIT-1];
-#endif
     return frame->flits[(size >> 3) - 1 - 1];
 }
 
 int tloe_get_fsize(tl_msg_t *tlmsg) {
-    // TODO
+    // TODO Need to apply other message types (Currently, only GET and PULLPULLDATA are applied).
     if (tlmsg->header.chan == CHANNEL_A && tlmsg->header.opcode == A_GET_OPCODE)
         return sizeof(uint64_t) * 7;
     else if (tlmsg->header.chan == CHANNEL_A && tlmsg->header.opcode == A_PUTFULLDATA_OPCODE)
@@ -131,13 +124,9 @@ void tloe_set_tlmsg(tloe_frame_t *frame, tl_msg_t *tlmsg, int tl_size) {
 }
 
 int is_zero_tl_frame(tloe_frame_t *frame, int size) {
-#if 1
     uint64_t frame_mask = frame->flits[(size >> 3) - 1 - 1];
 
 	return frame_mask == 0;
-#else
-    return 0;
-#endif
 }
 
 int is_ackonly_frame(tloe_frame_t *frame) {

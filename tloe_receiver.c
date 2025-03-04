@@ -37,19 +37,11 @@ static void serve_ack(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
     // Slide retransmission buffer for flushing ancester frames
     // Note that ACK/NAK transmit the sequence number of the received frame as seq_num_ack
     slide_window(e, recv_tloeframe);
-#if 0
-    printf("KKK %d, %d\n", recv_tloeframe->header.seq_num, recv_tloeframe->header.seq_num_ack);
-#endif
 
     // Additionally, NAK re-transmit the frames in the retransmission buffer
     if (recv_tloeframe->header.ack == TLOE_NAK)  // NAK
         retransmit(e, tloe_seqnum_next(recv_tloeframe->header.seq_num_ack));
 
-#if 0 // not update, dup & oos
-    // Update sequence numbers
-    // Note that next_rx_seq must not be increased
-    e->acked_seq = recv_tloeframe->header.seq_num_ack; // we need the acked_seq?
-#endif
     e->ack_cnt++;
 
     if (e->ack_cnt % 100 == 0) {
@@ -78,7 +70,7 @@ static void send_ack_per_tl(tloe_endpoint_t *e, tl_msg_t *tlmsg, int f_size) {
         tloeframe_header->header.ack = TLOE_ACK;  // ACK
         tloe_set_mask(tloeframe_header, 0, f_size);
         tloeframe_header->header.chan = tlmsg->header.chan;
-#if 0
+#if 0   //TODO
         tloeframe_header->header.credit = header_size -3; 
 #else
         tloeframe_header->header.credit = header_size -2; 
