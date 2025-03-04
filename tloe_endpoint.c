@@ -92,16 +92,22 @@ static void tloe_endpoint_close(tloe_endpoint_t *e) {
 	delete_queue(e->response_buffer);
 }
 
-// Select data to process from buffers based on priority order  
-// ack_buffer -> response_buffer -> message_buffer
+// Select data to process from buffers based on priority order
+// response_buffer -> message_buffer, however, we need to consider
+// the starvation issue on message_buffer
+static int buffer_select_counter = 4;
 static tl_msg_t *select_buffer(tloe_endpoint_t *e) {
-	tl_msg_t *tlmsg = NULL;
+	tl_msg_t *tlmsg;
 
-	tlmsg = (tl_msg_t *) dequeue(e->response_buffer);
-	if (tlmsg) 
-		goto out;
+	if (--buffer_select_counter > 0) {
+		tlmsg = (tl_msg_t *) dequeue(e->response_buffer);
+		if (tlmsg) {
+			goto out;
+		}
+	}
 
 	tlmsg = (tl_msg_t *) dequeue(e->message_buffer);
+	buffer_select_counter = 4;
 out:
 	return tlmsg;
 }
