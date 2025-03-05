@@ -42,21 +42,8 @@ void slide_window(tloe_endpoint_t *e, tloe_frame_t *tloeframe) {
         if (diff > 0)
             break;
 
-        // TODO tlmsg is present and should be processed, but it must not be handled as an ACKONLY frame.  
-        // Before dequeue. (ACKONLY frames do not contain credit).  
-        if (rbe->tloe_frame.flits[0] && tloeframe->header.type == TYPE_ACKONLY)
-            break;
-
         rbe = (RetransmitBufferElement *) dequeue(retransmit_buffer);
         //printf("RX: frame.last_seq_num: %d, element->seq_num: %d\n", last_seq_num, e->tloe_frame.seq_num);
-
-        // Increase credits of received ack for flow control
-        // TODO Need to verify whether credit processing should be based on tlmsg in the retransmission_buffer
-        if (rbe->tloe_frame.flits[0]) {
-
-            credit_inc(&(e->fc), (tl_msg_t*)&rbe->tloe_frame.flits[0]);
-            e->fc_inc_cnt++;
-        }
 
         if (rbe) free(rbe);
         rbe = (RetransmitBufferElement *) getfront(retransmit_buffer);

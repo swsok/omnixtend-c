@@ -11,7 +11,7 @@ void set_tloe_frame(tloe_frame_t *tloeframe, tl_msg_t *tlmsg, uint32_t seq_num, 
     tloeframe->header.ack = ack;
     tloeframe->header.chan = chan;
     tloeframe->header.credit = credit;
-	tloe_set_tlmsg(tloeframe, tlmsg, 0);
+    tloe_set_tlmsg(tloeframe, tlmsg, 0);
 }
 
 int tloe_set_seq_num(tloe_frame_t *frame, int seq_num) {
@@ -41,25 +41,48 @@ int tloe_get_ack(tloe_frame_t *frame) {
     return frame->header.ack;
 }
 
+// TODO
 uint64_t tloe_set_mask(tloe_frame_t *frame, int mask, int size) {
     frame->flits[(size >> 3) - 1 - 1] = mask;
     return mask;
 }
 
+// TODO
 uint64_t tloe_get_mask(tloe_frame_t *frame, int size) {
     return frame->flits[(size >> 3) - 1 - 1];
 }
 
 int tloe_get_fsize(tl_msg_t *tlmsg) {
+    if (tlmsg == NULL) return DEFAULT_FRAME_SIZE;
+
+    int tlmsg_chan = tlmsg->header.chan;
+    int tlmsg_opcode = tlmsg->header.opcode;
+    int fsize;
+
     // TODO Need to apply other message types (Currently, only GET and PULLPULLDATA are applied).
-    if (tlmsg->header.chan == CHANNEL_A && tlmsg->header.opcode == A_GET_OPCODE)
-        return sizeof(uint64_t) * 7;
-    else if (tlmsg->header.chan == CHANNEL_A && tlmsg->header.opcode == A_PUTFULLDATA_OPCODE)
-#if 0
-        return sizeof(uint64_t) * 7 + (((1ULL << tlmsg->header.size) + 7 ) / 8);
-#else
-        return sizeof(uint64_t) * 7;
-#endif
+    switch (tlmsg_chan) {
+        case CHANNEL_A:
+            if (tlmsg_opcode == A_GET_OPCODE)
+                fsize = DEFAULT_FRAME_SIZE;
+            else if (tlmsg_opcode == A_PUTFULLDATA_OPCODE)
+                //return sizeof(uint64_t) * 7 + (((1ULL << tlmsg->header.size) + 7 ) / 8);
+                fsize = sizeof(uint64_t) + tlmsg_get_total_size(tlmsg);
+            break;
+        case CHANNEL_B:
+        case CHANNEL_C:
+        case CHANNEL_D:
+        case CHANNEL_E:
+            fsize = -1;
+            break;
+        default:
+            fsize = -1;
+    } 
+
+    return fsize;
+}
+
+int convert_size_to_flits(int size) {
+    return ((1ULL << size) + 7) / 8;
 }
 
 tl_msg_t *tloe_get_tlmsg(tloe_frame_t *frame, int tl_loc) {
@@ -74,6 +97,7 @@ tl_msg_t *tloe_get_tlmsg(tloe_frame_t *frame, int tl_loc) {
     tlmsg_size = tlheader->size;
 
     // calculate size of data
+    // TODO Need to apply other message types (Currently, only GET and PULLPULLDATA are applied).
     switch (tlmsg_chan) {
         case CHANNEL_A:
             if (tlmsg_opcode == A_GET_OPCODE) 
@@ -101,6 +125,7 @@ tl_msg_t *tloe_get_tlmsg(tloe_frame_t *frame, int tl_loc) {
 int tloe_get_tlmsg_size(tl_msg_t *tlmsg) {
     int data_size;
 
+    // TODO Need to apply other message types (Currently, only GET and PULLPULLDATA are applied).
     switch (tlmsg->header.chan) {
         case CHANNEL_A:
             if (tlmsg->header.opcode == A_GET_OPCODE) 
@@ -120,13 +145,13 @@ int tloe_get_tlmsg_size(tl_msg_t *tlmsg) {
 }
 
 void tloe_set_tlmsg(tloe_frame_t *frame, tl_msg_t *tlmsg, int tl_size) {
-	memcpy(&frame->flits[0], tlmsg, sizeof(uint64_t) + sizeof(uint64_t) * tl_size);
+    memcpy(&frame->flits[0], tlmsg, sizeof(uint64_t) + sizeof(uint64_t) * tl_size);
 }
 
 int is_zero_tl_frame(tloe_frame_t *frame, int size) {
     uint64_t frame_mask = frame->flits[(size >> 3) - 1 - 1];
 
-	return frame_mask == 0;
+    return frame_mask == 0;
 }
 
 int is_ackonly_frame(tloe_frame_t *frame) {
@@ -145,11 +170,11 @@ void tloe_frame_to_packet(tloe_frame_t *tloeframe, char *send_buffer, int send_b
     memset((void*)send_buffer, 0, send_buffer_size);
 
     // TLoE frame Header
-	be64_temp = htobe64(*(uint64_t*)&(tloeframe->header));
-	memcpy(send_buffer+offset, &be64_temp, sizeof(uint64_t));
-	offset += sizeof(uint64_t);
+    be64_temp = htobe64(*(uint64_t*)&(tloeframe->header));
+    memcpy(send_buffer+offset, &be64_temp, sizeof(uint64_t));
+    offset += sizeof(uint64_t);
 
-    // Flits 데이터 변환
+    // Flits
     for (int i = 0; i < flit_cnt; i++) {
         be64_temp = tloeframe->flits[i];
         be64_temp = htobe64(be64_temp);  // 워드 단위 big-endian 변환
@@ -169,7 +194,7 @@ void packet_to_tloe_frame(char *recv_buffer, int recv_buffer_size, tloe_frame_t 
     memcpy(&(tloeframe->header), &be64_temp, sizeof(tloe_header_t)); // 변환된 값 구조체에 복사
     offset += sizeof(uint64_t);
 
-    // Flits 데이터 변환
+    // Flits
     for (int i = 0; i < num_flits; i++) {
         memcpy(&be64_temp, recv_buffer + offset, sizeof(uint64_t));
         be64_temp = be64toh(be64_temp);  // big-endian에서 호스트 순서로 변환

@@ -11,7 +11,7 @@ void init_flowcontrol(flowcontrol_t *fc) {
 }
 
 void set_credit(flowcontrol_t *fc, int channel, int credit) {
-    fc->credits[channel] = (1 << credit);
+    fc->credits[channel] += (1 << credit);
 }
 
 int is_filled_credit(flowcontrol_t *fc, int channel) {
@@ -46,11 +46,9 @@ int check_all_channels(flowcontrol_t *fc) {
     return result;
 }
 
-
-
 // Function to decrease credits if sufficient, otherwise return -1
 int try_dec_credits(flowcontrol_t *fc, int tl_chan, int amount) {
-    int result = 0;
+    int result;
     if (fc->credits[tl_chan] < amount) {
         result = -1;  // Not enough credit
     } else {
@@ -62,8 +60,8 @@ int try_dec_credits(flowcontrol_t *fc, int tl_chan, int amount) {
 }
 
 int cal_flits(tl_msg_t *tlmsg) {
-    int header_size = get_tl_header_size(tlmsg);
-    int data_size = get_tl_data_size(tlmsg);
+    int header_size = tlmsg_get_header_size(tlmsg);
+    int data_size = tlmsg_get_data_size(tlmsg);
 
     int total_flits = 0;
 
@@ -76,23 +74,26 @@ int cal_flits(tl_msg_t *tlmsg) {
     return total_flits;
 }
 
-int credit_inc(flowcontrol_t *fc, tl_msg_t *tlmsg) {
-    int tl_chan = tlmsg->header.chan;
-    int total_flits = cal_flits(tlmsg);
+int fc_credit_inc(flowcontrol_t *fc, tloe_frame_t *tloeframe) {
+    int inc_credit = -1;
+    
+    if (tloeframe->header.chan != 0) { 
+        inc_credit = (1 << tloeframe->header.credit);
+        fc->credits[tloeframe->header.chan] += inc_credit;
+    }
 
-    fc->credits[tl_chan] += total_flits;
-
-    return fc->credits[tl_chan];
+    return inc_credit;
 }
 
-int credit_dec(flowcontrol_t *fc, tl_msg_t *tlmsg) {
+int fc_credit_dec(flowcontrol_t *fc, tl_msg_t *tlmsg) {
     int tl_chan = tlmsg->header.chan;
-    int available_credit = -1;
-    int total_flits = cal_flits(tlmsg);
+    int available_credit;
+    int dec_credit = cal_flits(tlmsg);
 
-    available_credit = try_dec_credits(fc, tl_chan, total_flits);
+    if ((available_credit = try_dec_credits(fc, tl_chan, dec_credit)) == -1) 
+        dec_credit = -1; 
 
-    return available_credit;
+    return dec_credit;
 }
 
 int get_credit(flowcontrol_t *fc, const int channel) {

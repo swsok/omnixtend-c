@@ -18,7 +18,8 @@ int is_filled_credit(flowcontrol_t *, int);
 int check_all_channels(flowcontrol_t *);
 int get_credit(flowcontrol_t *fc, const int channel);
 int cal_flits(tl_msg_t *);
-int credit_inc(flowcontrol_t *, tl_msg_t *);
-int credit_dec(flowcontrol_t *, tl_msg_t *);
+int fc_credit_inc(flowcontrol_t *, tloe_frame_t *);
+int fc_credit_dec(flowcontrol_t *, tl_msg_t *);
+void fc_credit_print(flowcontrol_t *fc);
 
 #endif // __FLOWCONTROL_H__

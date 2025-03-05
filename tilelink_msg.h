@@ -107,11 +107,12 @@ typedef struct tilelink_message_e_struct {
 // TileLink message with Data and Mask (n >= 6)
 
 // Operations for the TileLink message
-int get_tlmsg_credit(tl_msg_t *);
 int tlmsg_get_chan(tl_msg_t *);
 int tlmsg_get_opcode(tl_msg_t *);
 int tlmsg_get_size(tl_msg_t *);
-int get_tl_header_size(tl_msg_t *);
-int get_tl_data_size(tl_msg_t *);
+int tlmsg_get_flits_cnt(tl_msg_t *); 
+int tlmsg_get_header_size(tl_msg_t *);
+int tlmsg_get_data_size(tl_msg_t *);
+int tlmsg_get_total_size(tl_msg_t *);
 
 #endif // __TILELINK_MSG_H__

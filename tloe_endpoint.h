@@ -54,7 +54,9 @@ typedef struct tloe_endpoint_struct {
 	int drop_apacket_cnt;
 
 	int fc_inc_cnt;
+	int fc_inc_value;
 	int fc_dec_cnt;
+	int fc_dec_value;
 
 	int drop_tlmsg_cnt;
 	int drop_response_cnt;

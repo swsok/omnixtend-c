@@ -10,7 +10,7 @@
 #define TYPE_OPEN_CONNECTION  2
 #define TYPE_CLOSE_CONNECTION 3
 #define MAX_SIZE_FLIT         65
-#define DEFAULT_FRAME_SIZE    56
+#define DEFAULT_FRAME_SIZE    (8 * 7)  // sizeof(uint64_t) * (tloeheader + padding*5 + mask)
 
 typedef struct __attribute__((packed,aligned(8))) {
     unsigned char credit:5;
@@ -44,6 +44,7 @@ void tloe_set_tlmsg(tloe_frame_t *, tl_msg_t *, int);
 int is_zero_tl_frame(tloe_frame_t *, int);
 int is_ackonly_frame(tloe_frame_t *);
 int is_conn_msg(tloe_frame_t *);
+int convert_size_to_flits(int);
 void tloe_frame_to_packet(tloe_frame_t *, char *, int);
 void packet_to_tloe_frame(char *, int, tloe_frame_t *);
 int tloe_get_fsize(tl_msg_t *); 

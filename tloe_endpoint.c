@@ -51,7 +51,7 @@ static void tloe_endpoint_init(tloe_endpoint_t *e, int fabric_type, int master_s
     e->retransmit_buffer = create_queue(WINDOW_SIZE + 1);
     e->rx_buffer = create_queue(10); // credits
 	e->message_buffer = create_queue(10000);
-	e->ack_buffer = create_queue(100);
+	e->ack_buffer = create_queue(2048);
 	e->tl_msg_buffer = create_queue(10000);
 	e->response_buffer = create_queue(100);
 
@@ -70,7 +70,9 @@ static void tloe_endpoint_init(tloe_endpoint_t *e, int fabric_type, int master_s
 	e->drop_apacket_cnt = 0;
 
 	e->fc_inc_cnt = 0;
+	e->fc_inc_value = 0;
 	e->fc_dec_cnt = 0;
+	e->fc_dec_value = 0;
 
 	e->drop_tlmsg_cnt = 0;
 	e->drop_response_cnt = 0;
@@ -153,7 +155,7 @@ static void print_endpoint_status(tloe_endpoint_t *e) {
             " Delayed: %d, Dropped: %d (Normal: %d, ACK: %d)\n"
             " Estimated ACK on the other side: %d\n"
             "Channel Credits [0|A|B|C|D|E]: %d|%d|%d|%d|%d|%d\n"
-            " Flow Control (Inc/Dec): %d/%d\n"
+            " Flow Control (Inc/Value, Dec/Value): %d/%d, %d/%d\n"
             "\nBuffer Drops:\n"
             " TL Messages: %d, Responses: %d\n"
             " ACCESSACK: %d, ACCESSACK_DATA: %d\n"
@@ -164,9 +166,10 @@ static void print_endpoint_status(tloe_endpoint_t *e) {
             e->next_rx_seq-e->delay_cnt+e->oos_cnt+e->dup_cnt-e->drop_apacket_cnt,
             e->fc.credits[0], e->fc.credits[CHANNEL_A], e->fc.credits[CHANNEL_B], 
             e->fc.credits[CHANNEL_C], e->fc.credits[CHANNEL_D], 
-            e->fc.credits[CHANNEL_E], e->fc_inc_cnt, e->fc_dec_cnt,
+            e->fc.credits[CHANNEL_E], e->fc_inc_cnt, e->fc_inc_value,
+            e->fc_dec_cnt, e->fc_dec_value,
             e->drop_tlmsg_cnt, e->drop_response_cnt,
-            e->accessack_cnt, e->accessackdata_cnt);
+            e->accessack_cnt, e->accessackdata_cnt); 
 }
 
 static int create_and_enqueue_message(tloe_endpoint_t *e, int msg_index) {

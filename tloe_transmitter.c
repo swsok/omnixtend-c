@@ -15,7 +15,6 @@ static int enqueue_retransmit_buffer(tloe_endpoint_t *e, RetransmitBufferElement
     rbe->state = TLOE_INIT;
     rbe->f_size = f_size;
     // Get the current time
-    //rbe->send_time = is_zero_tl_frame(f) ? get_current_timestamp(&(e->iteration_ts)) : 0;
     rbe->send_time = get_current_timestamp(&(e->iteration_ts));
 
     return enqueue(e->retransmit_buffer, rbe);
@@ -66,25 +65,28 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
         goto out;
     }
 
-    if (request_normal_tlmsg == NULL && is_queue_empty(e->ack_buffer)) {
+    if (request_normal_tlmsg == NULL && is_queue_empty(e->ack_buffer))
         goto out;
-    }
 
+    // Decrease credit based on the tilelink message
     if (request_normal_tlmsg) {
-        // Decrease credit based on the tilelink message
-        if (credit_dec(&(e->fc), request_normal_tlmsg) == 0) {
+        int credit;
+
+        if ((credit = fc_credit_dec(&(e->fc), request_normal_tlmsg)) != -1) {
+            e->fc_dec_cnt++;
+            e->fc_dec_value += credit; 
+        } else if (!is_queue_empty(e->ack_buffer)) {
+            return_tlmsg = request_normal_tlmsg;
+            request_normal_tlmsg = NULL;
+        } else {
             return_tlmsg = request_normal_tlmsg;
             goto out;
-        } else {
-            e->fc_dec_cnt++;
         }
     }
 
     // Get packet_size
-    if (request_normal_tlmsg == NULL)
-        tloeframe_size = DEFAULT_FRAME_SIZE;
-    else 
-        tloeframe_size = tloe_get_fsize(request_normal_tlmsg);
+    tloeframe_size = tloe_get_fsize(request_normal_tlmsg);
+    BUG_ON(tloeframe_size == -1, "Frame size error");
 
     // Create normal frame
     tloe_frame_t *f = (tloe_frame_t *)malloc(tloeframe_size);
@@ -114,12 +116,7 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 
     // Enqueue to retransmit buffer
     enqueued = enqueue_retransmit_buffer(e, rbe, f, tloeframe_size);
-    //    printf("enqueue retransmit buffer : %d, %ld\n", f->header.seq_num, f->flits[0]);
     BUG_ON(!enqueued, "failed to enqueue retransmit buffer element.");
-
-#if 0
-    print_payload((char *)f, tloeframe_size);
-#endif
 
     // Send normal frame
     // Send the request_normal_tlmsg
