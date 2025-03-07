@@ -10,6 +10,7 @@
 #include "retransmission.h"
 #include "timeout.h"
 
+#if 0
 // TODO to-be modified
 static void send_ackonly_frame(tloe_endpoint_t *e, tloe_frame_t *recv_frame, int size) {
 	char send_buffer[MAX_BUFFER_SIZE];
@@ -31,6 +32,7 @@ static void send_ackonly_frame(tloe_endpoint_t *e, tloe_frame_t *recv_frame, int
     // Send the request_normal_frame using the ether
     tloe_fabric_send(e, send_buffer, size);
 }
+#endif
 
 static void serve_ack(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
     // Slide retransmission buffer for flushing ancester frames
@@ -224,8 +226,8 @@ void RX(tloe_endpoint_t *e) {
         if (tloe_seqnum_cmp(recv_tloeframe->header.seq_num_ack, e->acked_seq) > 0)
             e->acked_seq = recv_tloeframe->header.seq_num_ack;
 
-        // Send ACKONLY msg
-        send_ackonly_frame(e, recv_tloeframe, size);
+        // Set if an ACKONLY frame should be transmitted 
+        e->should_send_ackonly_frame = true;
 
         // Increase credit
         if ((inc_credit = fc_credit_inc(&(e->fc), recv_tloeframe)) != -1) {

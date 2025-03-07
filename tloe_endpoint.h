@@ -42,6 +42,8 @@ typedef struct tloe_endpoint_struct {
 	uint32_t acked_seq;
 	int acked;
 
+    int should_send_ackonly_frame;
+
 	int ack_cnt;
 	int dup_cnt;
 	int oos_cnt;

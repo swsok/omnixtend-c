@@ -8,6 +8,28 @@
 #include "retransmission.h"
 #include "timeout.h"
 
+static void send_ackonly_frame(tloe_endpoint_t *e) {
+	char send_buffer[MAX_BUFFER_SIZE];
+    tloe_frame_t f;
+    int fsize = tloe_get_fsize(NULL);
+
+    f.header.type = TYPE_ACKONLY;
+    // Update the sequence number
+    f.header.seq_num = e->next_tx_seq;
+    // Update the sequence number of the ack
+    f.header.seq_num_ack = tloe_seqnum_prev(e->next_rx_seq);
+    // Set the ack to TLOE_ACK
+    f.header.ack = TLOE_ACK;
+    tloe_set_mask(&f, 0, fsize);
+    // Set 0 to channel and credit
+    f.header.chan = 0;
+    f.header.credit = 0;
+    // Convert tloe_frame into packet
+    tloe_frame_to_packet((tloe_frame_t *)&f, send_buffer, fsize);
+    // Send the request_normal_frame using the ether
+    tloe_fabric_send(e, send_buffer, fsize);
+}
+
 static int enqueue_retransmit_buffer(tloe_endpoint_t *e, RetransmitBufferElement *rbe, tloe_frame_t *f, int f_size) {
     // Set the tloe frame
     memcpy(&rbe->tloe_frame, f, f_size);
@@ -55,6 +77,11 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
     char send_buffer[MAX_BUFFER_SIZE];
     int tloeframe_size = 0;
     int enqueued;
+
+    if (e->should_send_ackonly_frame) {
+        send_ackonly_frame(e);
+        e->should_send_ackonly_frame = false;
+    } 
 
     if (is_queue_full(e->retransmit_buffer)) {
         return_tlmsg = request_normal_tlmsg;

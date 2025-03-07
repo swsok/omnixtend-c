@@ -55,6 +55,8 @@ static void tloe_endpoint_init(tloe_endpoint_t *e, int fabric_type, int master_s
 	e->tl_msg_buffer = create_queue(10000);
 	e->response_buffer = create_queue(100);
 
+    e->should_send_ackonly_frame = false;
+
 	init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
 	init_flowcontrol(&(e->fc));
 
