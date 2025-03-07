@@ -84,7 +84,8 @@ static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe
 
     // Update sequence numbers
     e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->header.seq_num);
-    e->acked_seq = recv_tloeframe->header.seq_num_ack;
+    if (tloe_seqnum_cmp(recv_tloeframe->header.seq_num_ack, e->acked_seq) > 0)
+        e->acked_seq = recv_tloeframe->header.seq_num_ack;
 
     // Find tlmsgs from mask
     mask = tloe_get_mask(recv_tloeframe, f_size);
@@ -213,7 +214,8 @@ void RX(tloe_endpoint_t *e) {
 
     // ACK/NAK (ACKONLY frame, spec 1.1)
     if (is_ackonly_frame(recv_tloeframe)) {
-        e->acked_seq = recv_tloeframe->header.seq_num_ack;
+        if (tloe_seqnum_cmp(recv_tloeframe->header.seq_num_ack, e->acked_seq) > 0)
+            e->acked_seq = recv_tloeframe->header.seq_num_ack;
         free(recv_tloeframe);
         goto out;
     }
@@ -221,7 +223,8 @@ void RX(tloe_endpoint_t *e) {
     // Zero tilelink frame
     if (is_zero_tl_frame(recv_tloeframe, size)) {
         e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->header.seq_num);
-        e->acked_seq = recv_tloeframe->header.seq_num_ack;
+        if (tloe_seqnum_cmp(recv_tloeframe->header.seq_num_ack, e->acked_seq) > 0)
+            e->acked_seq = recv_tloeframe->header.seq_num_ack;
 
         // Send ACKONLY msg
         send_ackonly_frame(e, recv_tloeframe, size);
