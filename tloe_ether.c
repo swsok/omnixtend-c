@@ -96,6 +96,7 @@ static TloeEther *tloe_ether_alloc_and_init(uint8_t dest_mac[ETHER_ADDR_LEN], ui
     TloeEther *ether;
 
     ether = (TloeEther *) malloc(sizeof(TloeEther));
+    memset((void *) ether, 0, sizeof(TloeEther));
     ether->sock = -1;
     memset((char *)&ether->sll, 0, sizeof(ether->sll));
     memcpy((char *)&ether->dest_mac, dest_mac, ETHER_ADDR_LEN);

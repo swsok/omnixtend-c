@@ -178,6 +178,7 @@ static int create_and_enqueue_message(tloe_endpoint_t *e, int msg_index) {
         printf("Memory allocation failed at packet %d!\n", msg_index);
         return 0;
     }
+    memset((void *) new_tlmsg, 0, sizeof(tl_msg_t));
 
     new_tlmsg->header.chan = CHANNEL_A;
     new_tlmsg->header.opcode = A_GET_OPCODE;
@@ -198,7 +199,7 @@ static int create_and_enqueue_message(tloe_endpoint_t *e, int msg_index) {
 
 static int read_memory(tloe_endpoint_t *e, uint64_t addr) {
     tl_msg_t *new_tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t) + sizeof(uint64_t) * 1);
-    memset(new_tlmsg, 0, sizeof(tl_msg_t));
+    memset(new_tlmsg, 0, sizeof(tl_msg_t) + sizeof(uint64_t) * 1);
 
     new_tlmsg->header.chan = CHANNEL_A;
     new_tlmsg->header.opcode = A_GET_OPCODE;
@@ -218,7 +219,7 @@ static int read_memory(tloe_endpoint_t *e, uint64_t addr) {
 
 static int write_memory(tloe_endpoint_t *e, uint64_t addr, uint64_t value) {
     tl_msg_t *new_tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t) + sizeof(uint64_t) * 2);
-    memset(new_tlmsg, 0, sizeof(tl_msg_t));
+    memset(new_tlmsg, 0, sizeof(tl_msg_t) + sizeof(uint64_t) * 2);
 
     new_tlmsg->header.chan = CHANNEL_A;
     new_tlmsg->header.opcode = A_PUTFULLDATA_OPCODE;
@@ -246,7 +247,7 @@ static void print_credit_status(tloe_endpoint_t *e) {
 
 
 static int handle_user_input(tloe_endpoint_t *e, char input, int args1, 
-				int args2, int fabric_type, int master) {
+				int args2, int args3, int fabric_type, int master) {
     int ret = 0;
 
     if (input == 's') {
@@ -286,8 +287,11 @@ static int handle_user_input(tloe_endpoint_t *e, char input, int args1,
         if (!is_conn(e)) return 0;
         if (args1 == 0) return 0; 
         if (args2 == 0) return 0;
+        if (args3 == 0) args3 = 1;
 
-        write_memory(e, (uint64_t) args1, (uint64_t) args2);
+        for (int i = 0; i< args3; i++) {
+            write_memory(e, (uint64_t) args1, (uint64_t) args2);
+        }
     } else if (input == 't') {
         if (!is_conn(e)) return 0;
         for (int i = 0; i < args1; i++) {
@@ -393,7 +397,7 @@ int main(int argc, char *argv[]) {
     TloeEther *ether;
     char input, input_count[32];
     int master_slave;
-    int args1 = 0, args2 = 0;
+    int args1 = 0, args2 = 0, args3 = 0;
     char dev_name[64] = {0};
     char dest_mac_addr[64] = {0};
     int fabric_type;
@@ -413,6 +417,7 @@ int main(int argc, char *argv[]) {
 
     // Initialize tloe_endpoint
     e = (tloe_endpoint_t *)malloc(sizeof(tloe_endpoint_t));
+    memset((void *)e, 0, sizeof(tloe_endpoint_t));
     tloe_endpoint_init(e, fabric_type, master_slave);
     tloe_fabric_init(e, fabric_type);
 
@@ -428,15 +433,15 @@ int main(int argc, char *argv[]) {
         printf("> ");
         fgets(input_count, sizeof(input_count), stdin);
 
-        if (sscanf(input_count, " %c %x %x", &input, &args1, &args2) < 1) {
+        if (sscanf(input_count, " %c %x %x %x", &input, &args1, &args2, &args3) < 1) {
             printf("Invalid input! Try again.\n");
             continue;
         }
 
-        if (handle_user_input(e, input, args1, args2, fabric_type, master_slave))
+        if (handle_user_input(e, input, args1, args2, args3, fabric_type, master_slave))
             break;
 
-        args1 = args2 = 0;
+        args1 = args2 = args3 = 0;
     }
 
     tloe_endpoint_close(e);

@@ -15,7 +15,7 @@ void set_credit(flowcontrol_t *fc, int channel, int credit) {
 }
 
 int is_filled_credit(flowcontrol_t *fc, int channel) {
-#if 0 // WD only returns A, C, and E channels 
+#if 1 // WD only returns A, C, and E channels 
     return fc->credits[channel] > (1 << CREDIT_INIT);
 #else
     if (channel == CHANNEL_A || channel == CHANNEL_C || channel == CHANNEL_E)
@@ -29,7 +29,7 @@ int check_all_channels(flowcontrol_t *fc) {
     int result = 1;
     int credit_init = (1 << CREDIT_INIT);
 
-#if 0 // WD only returns A, C, and E channels 
+#if 1 // WD only returns A, C, and E channels 
     if ((fc->credits[CHANNEL_A] > credit_init) && \
         (fc->credits[CHANNEL_B] > credit_init) && \
         (fc->credits[CHANNEL_C] > credit_init) && \
@@ -59,21 +59,6 @@ int try_dec_credits(flowcontrol_t *fc, int tl_chan, int amount) {
     return result;
 }
 
-int cal_flits(tl_msg_t *tlmsg) {
-    int header_size = tlmsg_get_header_size(tlmsg);
-    int data_size = tlmsg_get_data_size(tlmsg);
-
-    int total_flits = 0;
-
-    // Calculate required total flits: Header + Data
-    if (header_size > 0)
-        total_flits += ((1ULL << header_size) + 7 ) / 8;
-    if (data_size > 0)
-        total_flits += ((1ULL << data_size) + 7 ) / 8;
-
-    return total_flits;
-}
-
 int fc_credit_inc(flowcontrol_t *fc, tloe_frame_t *tloeframe) {
     int inc_credit = -1;
     
@@ -88,7 +73,7 @@ int fc_credit_inc(flowcontrol_t *fc, tloe_frame_t *tloeframe) {
 int fc_credit_dec(flowcontrol_t *fc, tl_msg_t *tlmsg) {
     int tl_chan = tlmsg->header.chan;
     int available_credit;
-    int dec_credit = cal_flits(tlmsg);
+    int dec_credit = tlmsg_get_flits_cnt(tlmsg);
 
     if ((available_credit = try_dec_credits(fc, tl_chan, dec_credit)) == -1) 
         dec_credit = -1; 

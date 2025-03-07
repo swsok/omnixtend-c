@@ -50,9 +50,8 @@ static void serve_ack(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
 }
 
 static int enqueue_ack_buffer(tloe_endpoint_t *e, int channel, int total_flits, int f_size) {
-    while (1) {
-        if (total_flits == 0) break;
-
+    while (total_flits != 0) {
+        // Identify the LSB position using two's complement
         int credit_to_send = (total_flits & -total_flits);
 
         tloe_frame_t *tloeframe_ack = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
@@ -91,7 +90,7 @@ static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe
     mask = tloe_get_mask(recv_tloeframe, f_size);
 
     i = 0;
-    while (1) {
+    while (mask != 0) {
         if (mask & 1) {
             // Extract tlmsg and enqueue into tl_msg_buffer
             tlmsg = tloe_get_tlmsg(recv_tloeframe, i);
@@ -106,11 +105,9 @@ static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe
         }
 
         mask >>= 1;
-        if (mask == 0) goto out;
         i++;
     }
 
-out:
     // Send ack for flow-control
     enqueue_ack_buffer(e, tlmsg->header.chan, total_flits, f_size);
 }
@@ -199,6 +196,7 @@ void RX(tloe_endpoint_t *e) {
         fprintf(stderr, "%s[%d] failed to allocate memory for recv_tloeframe\n", __FILE__, __LINE__);
         goto out;
     }
+    memset((void *)recv_tloeframe, 0, sizeof(tloe_frame_t));
 
     // Receive a frame from the Ethernet layer
     size = tloe_fabric_recv(e, recv_buffer, sizeof(recv_buffer));

@@ -21,8 +21,6 @@ static int enqueue_retransmit_buffer(tloe_endpoint_t *e, RetransmitBufferElement
 }
 
 static void prepare_normal_frame(tloe_endpoint_t *e, tloe_frame_t *f, tl_msg_t *tlmsg, int f_size) {
-    int tl_size;
-
     // Update the sequence number
     f->header.seq_num = e->next_tx_seq;
     // Update the sequence number of the ack
@@ -30,12 +28,10 @@ static void prepare_normal_frame(tloe_endpoint_t *e, tloe_frame_t *f, tl_msg_t *
     // Set the ack to TLOE_ACK
     f->header.ack = TLOE_ACK;
     if (tlmsg) {
-        // TODO merge
-        tl_size = tloe_get_tlmsg_size(tlmsg); 
+        // Set the tilelink msg
+        tloe_set_tlmsg(f, tlmsg);
         // Set the mask to indicate normal packet
         tloe_set_mask(f, 1, f_size);
-        // Set the tilelink msg
-        tloe_set_tlmsg(f, tlmsg, tl_size);
     } else {
         tloe_set_mask(f, 0, f_size);
     }
@@ -71,6 +67,8 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
     // Decrease credit based on the tilelink message
     if (request_normal_tlmsg) {
         int credit;
+
+        printf("credit [A][%d] [D][%d]\n", e->fc.credits[CHANNEL_A], e->fc.credits[CHANNEL_D]);
 
         if ((credit = fc_credit_dec(&(e->fc), request_normal_tlmsg)) != -1) {
             e->fc_dec_cnt++;
@@ -112,7 +110,8 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
                 __FILE__, __LINE__);
         return_tlmsg = request_normal_tlmsg;
         goto out;
-    }
+    } 
+    memset((void *)rbe, 0, sizeof(RetransmitBufferElement));
 
     // Enqueue to retransmit buffer
     enqueued = enqueue_retransmit_buffer(e, rbe, f, tloeframe_size);

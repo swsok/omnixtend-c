@@ -22,8 +22,8 @@ int tl_handler_init() {
         fprintf(stderr, "Memory allocation failed\n");
         goto out;
     }
-
     memset(mem_storage, 0, MEM_SIZE);
+
 out:
     return 0;
 }
@@ -44,17 +44,20 @@ void handle_A_PUTFULLDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
     // Write data to memory
     int data_size = 1 << (tl->header.size);
     int mem_offset = (tl->data[0]) % MEM_SIZE;
-    memcpy(mem_storage + mem_offset, tl->data, data_size);
+    memcpy(mem_storage + mem_offset, &(tl->data[1]), data_size);
 
     // Make tilelink response(AccessAck) and set data
-	tl_msg_t *tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));	
-	tlmsg->header.chan = CHANNEL_D;
-	tlmsg->header.opcode = D_ACCESSACK_OPCODE;
+    tl_msg_t *tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));	
+    memset((void *)tlmsg, 0, sizeof(tl_msg_t));
+
+    tlmsg->header.chan = CHANNEL_D;
+    tlmsg->header.opcode = D_ACCESSACK_OPCODE;
+    tlmsg->header.size = 0;
 
     if (!enqueue(e->response_buffer, tlmsg)) {
-		fprintf(stderr, "Failed to enqueue packet, buffer is full.\n");
-		e->drop_response_cnt++;
-		free(tlmsg);
+        fprintf(stderr, "Failed to enqueue packet, buffer is full.\n");
+        e->drop_response_cnt++;
+        free(tlmsg);
     }
     printf("%s Data received!\n", __func__);
 }
@@ -62,23 +65,24 @@ void handle_A_PUTFULLDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
 void handle_A_GET_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
     // Read data from memory
     int data_size = 1 << (tl->header.size);
-    uint64_t *data = (uint64_t *)malloc(sizeof(uint64_t) * data_size);
-    memcpy(data, mem_storage, data_size);
+    int mem_offset = (tl->data[0]) % MEM_SIZE;
 
     // Make tilelink response(AccessAckData) and set data
-	tl_msg_t *tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));	
-	tlmsg->header.chan = CHANNEL_D;
-	tlmsg->header.opcode = D_ACCESSACKDATA_OPCODE;
+    tl_msg_t *tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t) + data_size);	
+    memset((void *)tlmsg, 0, sizeof(tl_msg_t) + data_size);
 
-	if (!enqueue(e->response_buffer, tlmsg)) {
-		fprintf(stderr, "Failed to enqueue packet, buffer is full.\n");
-		e->drop_response_cnt++;
-		free(data);
-		free(tlmsg);
-	}
+    tlmsg->header.chan = CHANNEL_D;
+    tlmsg->header.opcode = D_ACCESSACKDATA_OPCODE;
+    tlmsg->header.size = tl->header.size;
+    memcpy(&(tlmsg->data[0]), mem_storage + mem_offset, data_size);
+
+    if (!enqueue(e->response_buffer, tlmsg)) {
+        fprintf(stderr, "Failed to enqueue packet, buffer is full.\n");
+        e->drop_response_cnt++;
+        free(tlmsg);
+    }
 
     printf("%s Data received!\n", __func__);
-    free(data);
 }
 
 void handle_D_ACCESSACK_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {

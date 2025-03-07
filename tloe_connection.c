@@ -10,9 +10,10 @@ static void serve_open_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
     // If slave, send chan/credit message
     if (e->master == 0) {
         tloe_frame_t *f = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
+        memset((void *)f, 0, sizeof(tloe_frame_t));
 
         // Set Open Connection
-        f->header.type = TYPE_OPEN_CONNECTION;
+        f->header.type = TYPE_NORMAL;
         // Update the sequence number
         f->header.seq_num = e->next_tx_seq;
         // Update the sequence number of the ack
@@ -47,6 +48,7 @@ static void serve_close_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
     // If slave, send chan/credit message
     if (e->master == 0) {
         tloe_frame_t *f = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
+        memset((void *)f, 0, sizeof(tloe_frame_t));
 
         // Set Open Connection
         f->header.type = TYPE_CLOSE_CONNECTION;
@@ -107,7 +109,7 @@ static int recv_conn_frame(tloe_endpoint_t *e) {
     int size;
     long elapsed_us;
     struct timespec ts, start, now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
+    clock_gettime(CLOCK_MONOTONIC, &start);
 
     while (1) {
         size = tloe_fabric_recv(e, recv_buffer, sizeof(recv_buffer));
@@ -140,6 +142,7 @@ static int recv_conn_frame(tloe_endpoint_t *e) {
             goto out;
         }
 
+        clock_gettime(CLOCK_MONOTONIC, &now);
         elapsed_us = (now.tv_sec - start.tv_sec) * 1000000L + (now.tv_nsec - start.tv_nsec) / 1000L;
 
         if (elapsed_us >= CONN_RESEND_TIME) {

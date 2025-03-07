@@ -30,7 +30,6 @@ typedef struct __attribute__((packed,aligned(8))) {
     uint64_t flits[MAX_SIZE_FLIT];
 } tloe_frame_t;
 
-void set_tloe_frame(tloe_frame_t *, tl_msg_t *, uint32_t, uint32_t, uint8_t, uint8_t, uint8_t);
 int tloe_set_seq_num(tloe_frame_t *, int);
 int tloe_get_seq_num(tloe_frame_t *);
 int tloe_set_seq_num_ack(tloe_frame_t *, int);
@@ -40,14 +39,12 @@ int tloe_get_ack(tloe_frame_t *);
 uint64_t tloe_set_mask(tloe_frame_t *, int, int);
 uint64_t tloe_get_mask(tloe_frame_t *, int);
 tl_msg_t *tloe_get_tlmsg(tloe_frame_t *, int);
-void tloe_set_tlmsg(tloe_frame_t *, tl_msg_t *, int);
+void tloe_set_tlmsg(tloe_frame_t *, tl_msg_t *);
 int is_zero_tl_frame(tloe_frame_t *, int);
 int is_ackonly_frame(tloe_frame_t *);
 int is_conn_msg(tloe_frame_t *);
-int convert_size_to_flits(int);
 void tloe_frame_to_packet(tloe_frame_t *, char *, int);
 void packet_to_tloe_frame(char *, int, tloe_frame_t *);
 int tloe_get_fsize(tl_msg_t *); 
-int tloe_get_tlmsg_size(tl_msg_t *);
 
 #endif // __TLOE_FRAME_H__

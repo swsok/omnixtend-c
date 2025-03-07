@@ -16,11 +16,11 @@ int tlmsg_get_size(tl_msg_t *tlmsg) {
     return tlmsg->header.size;
 }
 
-int tlmsg_get_flits_cnt(tl_msg_t *tlmsg) {
-    int tl_chan = tlmsg->header.chan;
-    int tl_opcode = tlmsg->header.opcode;
-    int tl_size = tlmsg->header.size;
+int convert_size_to_flits(int size) {
+    return (size + 7) / 8;
+}
 
+int tlmsg_get_flits_cnt(tl_msg_t *tlmsg) {
     int header_size = tlmsg_get_header_size(tlmsg);
     int data_size = tlmsg_get_data_size(tlmsg);
     int total_flits = 0;
@@ -33,6 +33,7 @@ int tlmsg_get_flits_cnt(tl_msg_t *tlmsg) {
     return total_flits;
 }
 
+// Return the header size of tilelink msg
 int tlmsg_get_header_size(tl_msg_t *tlmsg) {
     int tl_chan = tlmsg->header.chan;
     int tl_opcode = tlmsg->header.opcode;
@@ -60,13 +61,14 @@ int tlmsg_get_header_size(tl_msg_t *tlmsg) {
         default:
             // Handle invalid channels
             printf("Wrong Channel\n");
-            exit(1);
+//            exit(1);
     }
 
     // Header size 2^3 represents 8 bytes, and 4 represents 2^4, which is 16 bytes
-    return header_size;
+    return (1ULL << header_size);
 }
 
+// Return the data size of tilelink msg
 int tlmsg_get_data_size(tl_msg_t *tlmsg) {
     int tl_chan = tlmsg->header.chan;
     int tl_opcode = tlmsg->header.opcode;
@@ -95,17 +97,16 @@ int tlmsg_get_data_size(tl_msg_t *tlmsg) {
         default:
             // Handle invalid channels
             printf("Wrong Channel\n");
-            exit(1);
+//            exit(1);
     }
 
-    return data_size;
+    return (1ULL << data_size);
 }
 
 int tlmsg_get_total_size(tl_msg_t *tlmsg) {
     int total_size;
 
-    total_size = (1ULL << tlmsg_get_header_size(tlmsg)) + 
-                (1ULL << tlmsg_get_data_size(tlmsg));
+    total_size = tlmsg_get_header_size(tlmsg) + tlmsg_get_data_size(tlmsg);
 
     return total_size;
 }

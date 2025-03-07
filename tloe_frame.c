@@ -5,15 +5,6 @@
 #include "tloe_common.h"
 #include "tilelink_msg.h"
 
-void set_tloe_frame(tloe_frame_t *tloeframe, tl_msg_t *tlmsg, uint32_t seq_num, uint32_t seq_num_ack, uint8_t ack, uint8_t chan, uint8_t credit) {
-    tloeframe->header.seq_num = seq_num;
-    tloeframe->header.seq_num_ack = seq_num_ack;
-    tloeframe->header.ack = ack;
-    tloeframe->header.chan = chan;
-    tloeframe->header.credit = credit;
-    tloe_set_tlmsg(tloeframe, tlmsg, 0);
-}
-
 int tloe_set_seq_num(tloe_frame_t *frame, int seq_num) {
     frame->header.seq_num = seq_num;
     return seq_num;
@@ -41,79 +32,39 @@ int tloe_get_ack(tloe_frame_t *frame) {
     return frame->header.ack;
 }
 
-// TODO
-uint64_t tloe_set_mask(tloe_frame_t *frame, int mask, int size) {
-    frame->flits[(size >> 3) - 1 - 1] = mask;
+// Convert packet_size to flit_cnt (>>3 - 1) and decrease tloe_header by 1
+uint64_t tloe_set_mask(tloe_frame_t *frame, int mask, int packet_size) {
+    frame->flits[((packet_size >> 3) - 1) - (sizeof(uint64_t) / 8)] = mask;
     return mask;
 }
 
-// TODO
-uint64_t tloe_get_mask(tloe_frame_t *frame, int size) {
-    return frame->flits[(size >> 3) - 1 - 1];
+// Convert packet_size to flit_cnt (>>3 - 1) and decrease tloe_header by 1
+uint64_t tloe_get_mask(tloe_frame_t *frame, int packet_size) {
+    return frame->flits[((packet_size >> 3) - 1) - (sizeof(uint64_t) / 8)];
 }
 
 int tloe_get_fsize(tl_msg_t *tlmsg) {
     if (tlmsg == NULL) return DEFAULT_FRAME_SIZE;
 
-    int tlmsg_chan = tlmsg->header.chan;
-    int tlmsg_opcode = tlmsg->header.opcode;
-    int fsize;
+    int fsize = sizeof(uint64_t) + tlmsg_get_total_size(tlmsg);
 
-    // TODO Need to apply other message types (Currently, only GET and PULLPULLDATA are applied).
-    switch (tlmsg_chan) {
-        case CHANNEL_A:
-            if (tlmsg_opcode == A_GET_OPCODE)
-                fsize = DEFAULT_FRAME_SIZE;
-            else if (tlmsg_opcode == A_PUTFULLDATA_OPCODE)
-                //return sizeof(uint64_t) * 7 + (((1ULL << tlmsg->header.size) + 7 ) / 8);
-                fsize = sizeof(uint64_t) + tlmsg_get_total_size(tlmsg);
-            break;
-        case CHANNEL_B:
-        case CHANNEL_C:
-        case CHANNEL_D:
-        case CHANNEL_E:
-            fsize = -1;
-            break;
-        default:
-            fsize = -1;
-    } 
-
-    return fsize;
-}
-
-int convert_size_to_flits(int size) {
-    return ((1ULL << size) + 7) / 8;
+    // If the frame size is smaller than the minimum Ethernet packet size, set it to the minimum size.  
+    return (fsize < DEFAULT_FRAME_SIZE) ? DEFAULT_FRAME_SIZE : fsize;
 }
 
 tl_msg_t *tloe_get_tlmsg(tloe_frame_t *frame, int tl_loc) {
     int data_size;
-    int tlmsg_chan, tlmsg_opcode, tlmsg_size;
+    tl_msg_t tl_msg_header;
     tl_msg_t *tlmsg;
 
-    // Put data into tlmsg
     tl_header_t *tlheader = (tl_header_t*) &frame->flits[tl_loc];
-    tlmsg_chan = tlheader->chan;
-    tlmsg_opcode = tlheader->opcode;
-    tlmsg_size = tlheader->size;
+    tl_msg_header.header.chan = tlheader->chan;
+    tl_msg_header.header.opcode = tlheader->opcode;
+    tl_msg_header.header.size = tlheader->size;
 
-    // calculate size of data
-    // TODO Need to apply other message types (Currently, only GET and PULLPULLDATA are applied).
-    switch (tlmsg_chan) {
-        case CHANNEL_A:
-            if (tlmsg_opcode == A_GET_OPCODE) 
-                data_size = 1;
-            else if (tlmsg_opcode == A_PUTFULLDATA_OPCODE) 
-                data_size = 1 + (((1ULL << tlmsg_size) + 7 ) / 8);
-            break;
-        case CHANNEL_D:
-            if (tlmsg_opcode == D_ACCESSACK_OPCODE)
-                data_size = 0;
-            else if (tlmsg_opcode == D_ACCESSACKDATA_OPCODE) 
-                data_size = 1 + (((1ULL << tlmsg_size) + 7 ) / 8);
-            break;
-    }
+    // Calculate the total size of tlmsg in bytes.  
+    size_t total_size = tlmsg_get_total_size(&tl_msg_header); 
 
-    size_t total_size = sizeof(tl_msg_t) + (data_size * sizeof(uint64_t));
     tlmsg = (tl_msg_t *)malloc(total_size);
     BUG_ON(!tlmsg, "malloc failed");
 
@@ -122,34 +73,15 @@ tl_msg_t *tloe_get_tlmsg(tloe_frame_t *frame, int tl_loc) {
     return tlmsg;
 }
 
-int tloe_get_tlmsg_size(tl_msg_t *tlmsg) {
-    int data_size;
+void tloe_set_tlmsg(tloe_frame_t *frame, tl_msg_t *tlmsg) {
+    size_t tl_size = tlmsg_get_total_size(tlmsg);
 
-    // TODO Need to apply other message types (Currently, only GET and PULLPULLDATA are applied).
-    switch (tlmsg->header.chan) {
-        case CHANNEL_A:
-            if (tlmsg->header.opcode == A_GET_OPCODE) 
-                data_size = 1;
-            else if (tlmsg->header.opcode == A_PUTFULLDATA_OPCODE) 
-                data_size = 1 + (((1ULL << tlmsg->header.size) + 7 ) / 8);
-            break;
-        case CHANNEL_D:
-            if (tlmsg->header.opcode == D_ACCESSACK_OPCODE)
-                data_size = 0;
-            else if (tlmsg->header.opcode == D_ACCESSACKDATA_OPCODE) 
-                data_size = 1 + (((1ULL << tlmsg->header.size) + 7 ) / 8);
-            break;
-    }
-
-    return data_size;
-}
-
-void tloe_set_tlmsg(tloe_frame_t *frame, tl_msg_t *tlmsg, int tl_size) {
-    memcpy(&frame->flits[0], tlmsg, sizeof(uint64_t) + sizeof(uint64_t) * tl_size);
+    memcpy(&frame->flits[0], tlmsg, tl_size);
 }
 
 int is_zero_tl_frame(tloe_frame_t *frame, int size) {
-    uint64_t frame_mask = frame->flits[(size >> 3) - 1 - 1];
+    //uint64_t frame_mask = frame->flits[(size >> 3) - 1 - 1];
+    uint64_t frame_mask = tloe_get_mask(frame, size);
 
     return frame_mask == 0;
 }
@@ -181,7 +113,6 @@ void tloe_frame_to_packet(tloe_frame_t *tloeframe, char *send_buffer, int send_b
         memcpy(send_buffer+offset, &be64_temp, sizeof(uint64_t));
         offset += sizeof(uint64_t);
     }
-
 }
 
 void packet_to_tloe_frame(char *recv_buffer, int recv_buffer_size, tloe_frame_t *tloeframe) {
