@@ -71,6 +71,12 @@ static void send_request_normal_frame(tloe_endpoint_t *e, tloe_frame_t *f, int f
     tloe_fabric_send(e, send_buffer, f_size);
 }
 
+static void debug_print_send_frame(tloe_frame_t *f) {
+#ifdef DEBUG
+    DEBUG_ON("*TX Send normal frame: seq_num:%d, seq_num_ack:%d, chan:%d\n", f->header.seq_num, f->header.seq_num_ack, f->header.chan);
+#endif
+}
+
 tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
     tl_msg_t *return_tlmsg = NULL;
     RetransmitBufferElement *rbe;
@@ -168,6 +174,7 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 
     // Send normal frame
     // Send the request_normal_tlmsg
+    debug_print_send_frame(f);
     send_request_normal_frame(e, f, tloeframe_size);
     // Set the state to TLOE_SENT
     rbe->state = TLOE_SENT;

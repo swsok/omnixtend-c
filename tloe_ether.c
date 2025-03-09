@@ -6,6 +6,34 @@
 #include "tloe_ether.h"
 #include "tloe_common.h"
 
+static void debug_print_tloe_ethhdr(struct ether_header *eh) {
+#ifdef DEBUG
+    printf("DEST_MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+           eh->ether_dhost[0],
+           eh->ether_dhost[1],
+           eh->ether_dhost[2],
+           eh->ether_dhost[3],
+           eh->ether_dhost[4],
+           eh->ether_dhost[5]);
+    printf("SRC_MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+           eh->ether_shost[0],
+           eh->ether_shost[1],
+           eh->ether_shost[2],
+           eh->ether_shost[3],
+           eh->ether_shost[4],
+           eh->ether_shost[5]);
+    printf("Ethertpye: %04X\n", ntohs(eh->ether_type));
+#endif
+}
+
+static void debug_print_actual_send_size(int actual_send_size) {
+#ifdef DEBUG
+    if (actual_send_size < 0) {
+        DEBUG_PRINT("actual_send_size=%d, %s\n", actual_send_size, strerror(errno));
+    }
+#endif
+}
+
 static int tloe_mac_str2bytes(const char *mac_str, uint8_t mac_bytes[6]) {
     if (sscanf(mac_str, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
                 &mac_bytes[0], &mac_bytes[1], &mac_bytes[2],
@@ -51,12 +79,8 @@ retry:
     }
 
 
-#if DEBUG
-    tloe_print_ethhdr(ef);
-    if (actual_send_size < 0) {
-        DEBUG_PRINT("actual_send_size=%d, %s\n", actual_send_size, strerror(errno));
-    }
-#endif
+    debug_print_tloe_ethhdr(ef);
+    debug_print_actual_send_size(actual_send_size);
 
     return actual_send_size;
 }
@@ -73,9 +97,7 @@ size_t tloe_ether_recv(TloeEther *eth, char *payload, size_t payload_size) {
         return size;
     }
 
-#if DEBUG
-    tloe_print_ethhdr(ef);
-#endif
+    debug_print_tloe_ethhdr(ef);
 
     if (ef->ether_type != 0xAAAA) {
         copy_size = -1;
@@ -186,24 +208,6 @@ void tloe_ether_close(TloeEther *ether) {
 
     if (ether != NULL)
         free(ether);
-}
-
-static void tloe_print_ethhdr(struct ether_header *eh) {
-    printf("DEST_MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
-            eh->ether_dhost[0],
-            eh->ether_dhost[1],
-            eh->ether_dhost[2],
-            eh->ether_dhost[3],
-            eh->ether_dhost[4],
-            eh->ether_dhost[5]);
-    printf("SRC_MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
-            eh->ether_shost[0],
-            eh->ether_shost[1],
-            eh->ether_shost[2],
-            eh->ether_shost[3],
-            eh->ether_shost[4],
-            eh->ether_shost[5]);
-    printf("Ethertpye: %04X\n", ntohs(eh->ether_type));
 }
 
 static void set_tloe_ether(tloe_ether_header_t *tloeether, char *dest, char *src, unsigned short eth_type) {

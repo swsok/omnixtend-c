@@ -162,6 +162,12 @@ static void serve_oos_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, 
     e->oos_cnt++;
 }
 
+static void debug_print_receive_frame(tloe_frame_t *recv_tloeframe) {
+#ifdef DEBUG
+    DEBUG_ON("#(RX) receive packet seq_num: %d, seq_num_ack: %d\n", recv_tloeframe->header.seq_num, recv_tloeframe->header.seq_num_ack);
+#endif
+}
+
 void RX(tloe_endpoint_t *e) {
     int size;
     chan_credit_t chan_credit;
@@ -184,6 +190,7 @@ void RX(tloe_endpoint_t *e) {
 
     // Convert packet into tloe_frame
     packet_to_tloe_frame(recv_buffer, size, recv_tloeframe);
+    debug_print_receive_frame(recv_tloeframe);
 
     serve_ack(e, recv_tloeframe);
     e->ackonly_frame_sent = false;
