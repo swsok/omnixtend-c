@@ -6,8 +6,11 @@
 #include "tloe_frame.h"
 
 void init_flowcontrol(flowcontrol_t *fc) {
-	for (int i=0; i<CHANNEL_NUM; i++) 
+	for (int i=0; i<CHANNEL_NUM; i++) { 
 		set_credit(fc, i, CREDIT_INIT);	
+        fc->inc_cnt[i] = 0;
+        fc->dec_cnt[i] = 0;
+    }
 }
 
 void set_credit(flowcontrol_t *fc, int channel, int credit) {
@@ -53,6 +56,7 @@ int try_dec_credits(flowcontrol_t *fc, int tl_chan, int amount) {
         result = -1;  // Not enough credit
     } else {
         fc->credits[tl_chan] -= amount;
+        fc->dec_cnt[tl_chan] -= amount;
         result = fc->credits[tl_chan];  // Return remaining credit
     }    
 
@@ -65,6 +69,7 @@ int fc_credit_inc(flowcontrol_t *fc, tloe_frame_t *tloeframe) {
     if (tloeframe->header.chan != 0) { 
         inc_credit = (1 << tloeframe->header.credit);
         fc->credits[tloeframe->header.chan] += inc_credit;
+        fc->inc_cnt[tloeframe->header.chan] += inc_credit;
     }
 
     return inc_credit;

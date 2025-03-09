@@ -158,8 +158,10 @@ static void print_endpoint_status(tloe_endpoint_t *e) {
             " Estimated ACK on the other side: %d\n"
             "Channel Credits [0|A|B|C|D|E]: %d|%d|%d|%d|%d|%d\n"
             " Flow Control (Inc/Value, Dec/Value): %d/%d, %d/%d\n"
+            " [A][%d][%d]    [D][%d][%d]\n"
             "\nBuffer Drops:\n"
             " TL Messages: %d, Responses: %d\n"
+            "\nResponse count:\n"
             " ACCESSACK: %d, ACCESSACK_DATA: %d\n"
             "-----------------------------------------------------\n",
             e->next_tx_seq, e->next_tx_seq, e->next_rx_seq, e->next_rx_seq,
@@ -170,6 +172,8 @@ static void print_endpoint_status(tloe_endpoint_t *e) {
             e->fc.credits[CHANNEL_C], e->fc.credits[CHANNEL_D], 
             e->fc.credits[CHANNEL_E], e->fc_inc_cnt, e->fc_inc_value,
             e->fc_dec_cnt, e->fc_dec_value,
+            e->fc.inc_cnt[CHANNEL_A], e->fc.dec_cnt[CHANNEL_A],
+            e->fc.inc_cnt[CHANNEL_D], e->fc.dec_cnt[CHANNEL_D],
             e->drop_tlmsg_cnt, e->drop_response_cnt,
             e->accessack_cnt, e->accessackdata_cnt); 
 }
