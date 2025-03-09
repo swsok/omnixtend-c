@@ -92,7 +92,7 @@ static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe
         i++;
     }
 
-    // Send ack for flow-control
+    // Apply the calculated total flits (used credit) to the channel
     add_channel_flow_credits(e, tlmsg->header.chan, total_flits);
 
     // Increase credit
@@ -197,8 +197,7 @@ void RX(tloe_endpoint_t *e) {
 
     // ACK/NAK (ACKONLY frame, spec 1.1)
     if (is_ackonly_frame(recv_tloeframe)) {
-        if (tloe_seqnum_cmp(recv_tloeframe->header.seq_num_ack, e->acked_seq) > 0)
-            e->acked_seq = recv_tloeframe->header.seq_num_ack;
+        update_acked_seq(e, recv_tloeframe);
         free(recv_tloeframe);
         goto out;
     }
@@ -252,4 +251,3 @@ void RX(tloe_endpoint_t *e) {
     }
 out:
 }
-
