@@ -10,30 +10,6 @@
 #include "retransmission.h"
 #include "timeout.h"
 
-#if 0
-// TODO to-be modified
-static void send_ackonly_frame(tloe_endpoint_t *e, tloe_frame_t *recv_frame, int size) {
-	char send_buffer[MAX_BUFFER_SIZE];
-    tloe_frame_t f;
-
-    f.header.type = TYPE_ACKONLY;
-    // Update the sequence number
-    f.header.seq_num = e->next_tx_seq;
-    // Update the sequence number of the ack
-    f.header.seq_num_ack = recv_frame->header.seq_num;
-    // Set the ack to TLOE_ACK
-    f.header.ack = TLOE_ACK;
-    tloe_set_mask(&f, 0, size);
-    // Set 0 to channel and credit
-    f.header.chan = 0;
-    f.header.credit = 0;
-    // Convert tloe_frame into packet
-    tloe_frame_to_packet((tloe_frame_t *)&f, send_buffer, size);
-    // Send the request_normal_frame using the ether
-    tloe_fabric_send(e, send_buffer, size);
-}
-#endif
-
 static void serve_ack(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
     // Slide retransmission buffer for flushing ancester frames
     // Note that ACK/NAK transmit the sequence number of the received frame as seq_num_ack
@@ -68,12 +44,12 @@ static void update_acked_seq(tloe_endpoint_t *e, tloe_frame_t *frame) {
 static void update_flow_control_credits(tloe_endpoint_t *e, tloe_frame_t *frame) {
     int prev_credit = e->fc.credits[frame->header.chan];
     int inc_credit = fc_credit_inc(&(e->fc), frame);
-    
+
     if (inc_credit != -1) {
 #if DEBUG
         DEBUG_PRINT("INCREASE credit : chan: %d,  %d  ->  %d (%d)\n", 
-               frame->header.chan, prev_credit, 
-               e->fc.credits[frame->header.chan], e->fc_inc_cnt);
+                frame->header.chan, prev_credit, 
+                e->fc.credits[frame->header.chan], e->fc_inc_cnt);
 #endif
         e->fc_inc_cnt++;
         e->fc_inc_value += inc_credit;
@@ -107,7 +83,7 @@ static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe
                 fprintf(stderr, "tl_msg_buffer overflow.\n");
                 exit(1);
             }
-            
+
             // Calculate flits for sending ack for flow-control
             total_flits += tlmsg_get_flits_cnt(tlmsg);
         }
@@ -184,26 +160,6 @@ static void serve_oos_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, 
     init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
 
     e->oos_cnt++;
-}
-
-static void enqueue_ack_frame(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
-    int enqueued;
-    tloe_frame_t *frame = malloc(sizeof(tloe_frame_t));
-    BUG_ON(!frame, "failed to allocate memory for ack frame.");
-
-    *frame = *recv_tloeframe;
-    frame->header.seq_num = e->timeout_rx.last_ack_seq;
-    frame->header.seq_num_ack = e->timeout_rx.last_ack_seq;
-    frame->header.ack = TLOE_ACK;
-    tloe_set_mask(frame, 0, 0); //TODO
-    frame->header.chan = e->timeout_rx.last_channel;
-    frame->header.credit = e->timeout_rx.last_credit;
-    enqueued = enqueue(e->ack_buffer, (void *) frame);
-    BUG_ON(!enqueued, "failed to enqueue ack frame.");
-
-    e->timeout_rx.ack_pending = 0;
-    e->timeout_rx.ack_cnt = 0;
-    e->delay_cnt--;
 }
 
 void RX(tloe_endpoint_t *e) {
