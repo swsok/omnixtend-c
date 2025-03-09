@@ -3,7 +3,7 @@
 #include <time.h>
 
 #define DELAYED_ACK_TIME 1   // RTT * 2 (unit:us)
-#define TIMEOUT_TIME     10000   // RTT * 2 (unit:us)
+#define TIMEOUT_TIME     100000   // RTT * 2 (unit:us)
 
 typedef struct {
 	long ack_time;
