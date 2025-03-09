@@ -15,6 +15,7 @@ void init_flowcontrol(flowcontrol_t *fc) {
 
 void set_credit(flowcontrol_t *fc, int channel, int credit) {
     fc->credits[channel] += (1 << credit);
+    fc->tx_flow_credits[channel] = 0;
 }
 
 int is_filled_credit(flowcontrol_t *fc, int channel) {
@@ -88,4 +89,12 @@ int fc_credit_dec(flowcontrol_t *fc, tl_msg_t *tlmsg) {
 
 int get_credit(flowcontrol_t *fc, const int channel) {
     return fc->credits[channel];
+}
+
+unsigned int get_outgoing_credits(flowcontrol_t *fc, int chan) {
+    int credit = get_largest_pow(fc->tx_flow_credits[chan]);
+    if (credit)
+        fc->tx_flow_credits[chan] -= (1 << credit);
+
+    return credit;
 }

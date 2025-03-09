@@ -10,6 +10,7 @@
 
 typedef struct {
   unsigned int credits[CHANNEL_NUM];
+  unsigned int tx_flow_credits[CHANNEL_NUM];
 
   int inc_cnt[CHANNEL_NUM];
   int dec_cnt[CHANNEL_NUM];
@@ -24,5 +25,24 @@ int cal_flits(tl_msg_t *);
 int fc_credit_inc(flowcontrol_t *, tloe_frame_t *);
 int fc_credit_dec(flowcontrol_t *, tl_msg_t *);
 void fc_credit_print(flowcontrol_t *fc);
+unsigned int get_outgoing_credits(flowcontrol_t *, int);
+
+static inline int select_max_credit_channel(flowcontrol_t *fc) {
+    int i;
+    unsigned int max_credit = fc->tx_flow_credits[0];
+    int chan = 0;
+
+    for (i = 1; i < CHANNEL_NUM; i++) {
+        if (fc->tx_flow_credits[i] <= max_credit)
+            continue;
+        max_credit = fc->tx_flow_credits[i];
+        chan = i;
+    }   
+    return chan;
+}
+
+static inline int get_largest_pow(unsigned int value) {
+    return 31 - __builtin_clz(value);
+}
 
 #endif // __FLOWCONTROL_H__
