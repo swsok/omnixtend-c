@@ -19,13 +19,13 @@ void set_credit(flowcontrol_t *fc, int channel, int credit) {
 }
 
 int is_filled_credit(flowcontrol_t *fc, int channel) {
-#if 1 // WD only returns A, C, and E channels 
-    return fc->credits[channel] > (1 << CREDIT_INIT);
-#else
+#if WDE // WD only returns A, C, and E channels 
     if (channel == CHANNEL_A || channel == CHANNEL_C || channel == CHANNEL_E)
         return fc->credits[channel] > (1 << CREDIT_INIT);
     else
         return 0;
+#else
+    return fc->credits[channel] > (1 << CREDIT_INIT);
 #endif
 }
 
@@ -33,15 +33,15 @@ int check_all_channels(flowcontrol_t *fc) {
     int result = 1;
     int credit_init = (1 << CREDIT_INIT);
 
-#if 1 // WD only returns A, C, and E channels 
+#if WDE // WD only returns A, C, and E channels 
+    if ((fc->credits[CHANNEL_A] > credit_init) && \
+        (fc->credits[CHANNEL_C] > credit_init) && \
+        (fc->credits[CHANNEL_E] > credit_init)) {
+#else
     if ((fc->credits[CHANNEL_A] > credit_init) && \
         (fc->credits[CHANNEL_B] > credit_init) && \
         (fc->credits[CHANNEL_C] > credit_init) && \
         (fc->credits[CHANNEL_D] > credit_init) && \
-        (fc->credits[CHANNEL_E] > credit_init)) {
-#else
-    if ((fc->credits[CHANNEL_A] > credit_init) && \
-        (fc->credits[CHANNEL_C] > credit_init) && \
         (fc->credits[CHANNEL_E] > credit_init)) {
 #endif
         result = 0;
@@ -93,8 +93,7 @@ int get_credit(flowcontrol_t *fc, const int channel) {
 
 unsigned int get_outgoing_credits(flowcontrol_t *fc, int chan) {
     int credit = get_largest_pow(fc->tx_flow_credits[chan]);
-    if (credit)
-        fc->tx_flow_credits[chan] -= (1 << credit);
+    fc->tx_flow_credits[chan] -= (1 << credit);
 
     return credit;
 }
