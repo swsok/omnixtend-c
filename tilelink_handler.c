@@ -3,6 +3,7 @@
 #include <string.h>
 #include "tloe_frame.h"
 #include "tloe_endpoint.h"
+#include "tloe_common.h"
 #include "tilelink_handler.h"
 #include "util/circular_queue.h"
 
@@ -43,7 +44,8 @@ typedef void (*tl_handler_fn)(tloe_endpoint_t *e, tl_msg_t *tl);
 void handle_A_PUTFULLDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
     // Write data to memory
     int data_size = 1 << (tl->header.size);
-    int mem_offset = (tl->data[0]) % MEM_SIZE;
+    uint64_t mem_offset = ((uint64_t)(tl->data[0]) % MEM_SIZE);
+    BUG_ON((mem_offset + data_size) > MEM_SIZE, "TL_Handler: Memory access out of bounds\n");
     memcpy(mem_storage + mem_offset, &(tl->data[1]), data_size);
 
     // Make tilelink response(AccessAck) and set data
@@ -65,7 +67,8 @@ void handle_A_PUTFULLDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
 void handle_A_GET_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
     // Read data from memory
     int data_size = 1 << (tl->header.size);
-    int mem_offset = (tl->data[0]) % MEM_SIZE;
+    uint64_t mem_offset = ((uint64_t)(tl->data[0]) % MEM_SIZE);
+    BUG_ON((mem_offset + data_size) > MEM_SIZE, "TL_Handler: Memory access out of bounds\n");
 
     // Make tilelink response(AccessAckData) and set data
     tl_msg_t *tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t) + data_size);	

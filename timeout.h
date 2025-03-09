@@ -3,7 +3,7 @@
 #include <time.h>
 
 #define DELAYED_ACK_TIME 1   // RTT * 2 (unit:us)
-#define TIMEOUT_TIME     10000   // RTT * 2 (unit:us)
+#define TIMEOUT_TIME     100000   // RTT * 2 (unit:us)
 
 typedef struct {
 	long ack_time;
@@ -20,6 +20,8 @@ void update_iteration_timestamp(struct timespec *);
 long get_current_timestamp(struct timespec *);
 // Check if the timeout has occurred
 int is_timeout_tx(struct timespec *, time_t);
+// Check if the half of the timeout has occurred
+int is_timeout_tx_half(struct timespec *, time_t);
 // Initialize the timeout receiver
 void init_timeout_rx(struct timespec *, timeout_t *);
 // Check if the delayed ACK should be sent

@@ -71,35 +71,61 @@ static void send_request_normal_frame(tloe_endpoint_t *e, tloe_frame_t *f, int f
     tloe_fabric_send(e, send_buffer, f_size);
 }
 
+static void debug_print_send_frame(tloe_frame_t *f) {
+#ifdef DEBUG
+    DEBUG_ON("*TX Send normal frame: seq_num:%d, seq_num_ack:%d, chan:%d\n", f->header.seq_num, f->header.seq_num_ack, f->header.chan);
+#endif
+}
+
 tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
     tl_msg_t *return_tlmsg = NULL;
     RetransmitBufferElement *rbe;
     char send_buffer[MAX_BUFFER_SIZE];
     int tloeframe_size = 0;
     int enqueued;
+    int target_credit_chan = select_max_credit_channel(&(e->fc));
 
+    // Send an ACKONLY frame (set during zero-tlmsg processing) 
     if (e->should_send_ackonly_frame) {
         send_ackonly_frame(e);
         e->should_send_ackonly_frame = false;
-    } 
+    }
 
+    // Send ackonly frame if the retransmit buffer is full
+    // Note that the ackonly frame is sent only once when half of the timeout has occurred
+    // This is to avoid the case that the ackonly frame is sent multiple times
+    // Multiple ackonly frames make high traffic on the fabric and 
+    if (is_queue_full(e->retransmit_buffer) && e->ackonly_frame_sent == false) {
+        RetransmitBufferElement *rbe = getfront(e->retransmit_buffer);
+        if (is_timeout_tx_half(&(e->iteration_ts), rbe->send_time)) {
+            e->ackonly_frame_sent = true;
+            // Send the ackonly frame
+            send_ackonly_frame(e);
+            e->ackonly_cnt++;
+        }
+    }
+
+    // If the retransmit buffer is full, delay execution until the next cycle
     if (is_queue_full(e->retransmit_buffer)) {
         return_tlmsg = request_normal_tlmsg;
         goto out;
     }
 
-    if (request_normal_tlmsg == NULL && is_queue_empty(e->ack_buffer))
+    if (request_normal_tlmsg == NULL && is_queue_empty(e->ack_buffer) && target_credit_chan == 0)
         goto out;
 
     // Decrease credit based on the tilelink message
     if (request_normal_tlmsg) {
         int credit;
 
-        printf("credit [A][%d] [D][%d]\n", e->fc.credits[CHANNEL_A], e->fc.credits[CHANNEL_D]);
-
+#if DEBUG
+        DEBUG_PRINT("credit [A][%d] [D][%d]\n", e->fc.credits[CHANNEL_A], e->fc.credits[CHANNEL_D]);
+#endif
+        // Send tlmsg if credit is available 
         if ((credit = fc_credit_dec(&(e->fc), request_normal_tlmsg)) != -1) {
             e->fc_dec_cnt++;
             e->fc_dec_value += credit; 
+        // If credit is not available but ack_buffer contains data, send credit using a zero-tlmsg
         } else if (!is_queue_empty(e->ack_buffer)) {
             return_tlmsg = request_normal_tlmsg;
             request_normal_tlmsg = NULL;
@@ -123,10 +149,17 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 
         ack_frame = (tloe_frame_t *)dequeue(e->ack_buffer);
         f->header.seq_num_ack = ack_frame->header.seq_num_ack;
-        f->header.chan = ack_frame->header.chan;
-        f->header.credit = ack_frame->header.credit;
 
         free(ack_frame);
+    }
+
+    // Handling Credit
+    // if tx_flow_credits[channel] 2^, Send credit frame
+    // NOTE: target_credit_chan != 0 means there is at least one credit to be sent for the corresponding channel
+    if (target_credit_chan != 0) {
+        // Set credit info in frame
+        f->header.chan = target_credit_chan;
+        f->header.credit = get_outgoing_credits(&(e->fc), target_credit_chan);
     }
 
     // Enqueue to retransmitBuffer
@@ -146,6 +179,7 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 
     // Send normal frame
     // Send the request_normal_tlmsg
+    debug_print_send_frame(f);
     send_request_normal_frame(e, f, tloeframe_size);
     // Set the state to TLOE_SENT
     rbe->state = TLOE_SENT;

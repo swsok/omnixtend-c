@@ -56,6 +56,7 @@ static void tloe_endpoint_init(tloe_endpoint_t *e, int fabric_type, int master_s
 	e->response_buffer = create_queue(100);
 
     e->should_send_ackonly_frame = false;
+    e->ackonly_frame_sent = false;
 
 	init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
 	init_flowcontrol(&(e->fc));
@@ -83,6 +84,8 @@ static void tloe_endpoint_init(tloe_endpoint_t *e, int fabric_type, int master_s
     e->accessackdata_cnt = 0;
 
     e->close_flag = 0;
+
+    e->ackonly_cnt = 0;
 }
 
 static void tloe_endpoint_close(tloe_endpoint_t *e) {
@@ -156,20 +159,26 @@ static void print_endpoint_status(tloe_endpoint_t *e) {
             " ACK: %d, Duplicate: %d, Out-of-Sequence: %d\n"
             " Delayed: %d, Dropped: %d (Normal: %d, ACK: %d)\n"
             " Estimated ACK on the other side: %d\n"
+            " ACKONLY: %d\n"
             "Channel Credits [0|A|B|C|D|E]: %d|%d|%d|%d|%d|%d\n"
             " Flow Control (Inc/Value, Dec/Value): %d/%d, %d/%d\n"
+            " [A][%d][%d]    [D][%d][%d]\n"
             "\nBuffer Drops:\n"
             " TL Messages: %d, Responses: %d\n"
+            "\nResponse count:\n"
             " ACCESSACK: %d, ACCESSACK_DATA: %d\n"
             "-----------------------------------------------------\n",
             e->next_tx_seq, e->next_tx_seq, e->next_rx_seq, e->next_rx_seq,
             e->ack_cnt, e->dup_cnt, e->oos_cnt,
             e->delay_cnt, e->drop_cnt, e->drop_npacket_cnt, e->drop_apacket_cnt,
             e->next_rx_seq-e->delay_cnt+e->oos_cnt+e->dup_cnt-e->drop_apacket_cnt,
+            e->ackonly_cnt,
             e->fc.credits[0], e->fc.credits[CHANNEL_A], e->fc.credits[CHANNEL_B], 
             e->fc.credits[CHANNEL_C], e->fc.credits[CHANNEL_D], 
             e->fc.credits[CHANNEL_E], e->fc_inc_cnt, e->fc_inc_value,
             e->fc_dec_cnt, e->fc_dec_value,
+            e->fc.inc_cnt[CHANNEL_A], e->fc.dec_cnt[CHANNEL_A],
+            e->fc.inc_cnt[CHANNEL_D], e->fc.dec_cnt[CHANNEL_D],
             e->drop_tlmsg_cnt, e->drop_response_cnt,
             e->accessack_cnt, e->accessackdata_cnt); 
 }

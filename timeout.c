@@ -15,6 +15,11 @@ int is_timeout_tx(struct timespec *ts, time_t ref_time) {
 	return difftime(get_current_timestamp(ts), ref_time) >= TIMEOUT_TIME;
 }
 
+// Check if the half of the timeout has occurred
+int is_timeout_tx_half(struct timespec *ts, time_t ref_time) {
+	return difftime(get_current_timestamp(ts), ref_time) >= (TIMEOUT_TIME >> 1);
+}
+
 // Initialize the timeout receiver
 void init_timeout_rx(struct timespec *ts, timeout_t *rx) {
 	rx->ack_time = get_current_timestamp(ts);
