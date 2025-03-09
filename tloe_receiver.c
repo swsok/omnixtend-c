@@ -230,6 +230,7 @@ void RX(tloe_endpoint_t *e) {
     packet_to_tloe_frame(recv_buffer, size, recv_tloeframe);
 
     serve_ack(e, recv_tloeframe);
+    e->ackonly_frame_sent = false;
 
     // ACK/NAK (ACKONLY frame, spec 1.1)
     if (is_ackonly_frame(recv_tloeframe)) {

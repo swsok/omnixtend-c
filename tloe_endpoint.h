@@ -43,6 +43,7 @@ typedef struct tloe_endpoint_struct {
 	int acked;
 
     int should_send_ackonly_frame;
+    bool ackonly_frame_sent;
 
 	int ack_cnt;
 	int dup_cnt;
@@ -67,6 +68,8 @@ typedef struct tloe_endpoint_struct {
     int accessackdata_cnt;
 
     int close_flag;
+
+    int ackonly_cnt;
 } tloe_endpoint_t;
 
 typedef enum {

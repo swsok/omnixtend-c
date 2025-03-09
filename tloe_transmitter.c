@@ -84,7 +84,18 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
         e->should_send_ackonly_frame = false;
     }
 
-    if (is_queue_full(e->retransmit_buffer)) {
+    // Send ackonly frame if the retransmit buffer is full
+    // Note that the ackonly frame is sent only once when half of the timeout has occurred
+    // This is to avoid the case that the ackonly frame is sent multiple times
+    // Multiple ackonly frames make high traffic on the fabric and 
+    if (is_queue_full(e->retransmit_buffer) && e->ackonly_frame_sent == false) {
+        RetransmitBufferElement *rbe = getfront(e->retransmit_buffer);
+        if (is_timeout_tx_half(&(e->iteration_ts), rbe->send_time)) {
+            e->ackonly_frame_sent = true;
+            // Send the ackonly frame
+            send_ackonly_frame(e);
+            e->ackonly_cnt++;
+        }
         return_tlmsg = request_normal_tlmsg;
         goto out;
     }
