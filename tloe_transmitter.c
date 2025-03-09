@@ -85,6 +85,7 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
     int enqueued;
     int target_credit_chan = select_max_credit_channel(&(e->fc));
 
+    // Send an ACKONLY frame (set during zero-tlmsg processing) 
     if (e->should_send_ackonly_frame) {
         send_ackonly_frame(e);
         e->should_send_ackonly_frame = false;
@@ -102,6 +103,10 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
             send_ackonly_frame(e);
             e->ackonly_cnt++;
         }
+    }
+
+    // If the retransmit buffer is full, delay execution until the next cycle
+    if (is_queue_full(e->retransmit_buffer)) {
         return_tlmsg = request_normal_tlmsg;
         goto out;
     }
