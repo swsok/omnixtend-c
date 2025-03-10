@@ -55,6 +55,7 @@ void handle_A_PUTFULLDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
     tlmsg->header.chan = CHANNEL_D;
     tlmsg->header.opcode = D_ACCESSACK_OPCODE;
     tlmsg->header.size = 0;
+    tlmsg->header.source = tl->header.source;
 
     if (!enqueue(e->response_buffer, tlmsg)) {
         fprintf(stderr, "Failed to enqueue packet, buffer is full.\n");
@@ -78,6 +79,7 @@ void handle_A_GET_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
     tlmsg->header.opcode = D_ACCESSACKDATA_OPCODE;
     tlmsg->header.size = tl->header.size;
     memcpy(&(tlmsg->data[0]), mem_storage + mem_offset, data_size);
+    tlmsg->header.source = tl->header.source;
 
     if (!enqueue(e->response_buffer, tlmsg)) {
         fprintf(stderr, "Failed to enqueue packet, buffer is full.\n");
