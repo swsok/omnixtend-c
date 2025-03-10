@@ -1,11 +1,15 @@
 #include "tloe_endpoint.h"
 #include "tloe_connection.h"
+#include "tloe_seq_mgr.h"
 #include "flowcontrol.h"
 
 static void serve_open_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
     char send_buffer[MAX_BUFFER_SIZE];
     // Set credits
     set_credit(&(e->fc), recv_tloeframe->header.chan, recv_tloeframe->header.credit);
+    // Update sequence numbers
+    tloe_seqnum_update_next_rx_seq(e, recv_tloeframe);
+    tloe_seqnum_update_acked_seq(e, recv_tloeframe);
 
     // If slave, send chan/credit message
     if (e->master == 0) {
@@ -15,9 +19,9 @@ static void serve_open_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
         // Set Open Connection
         f->header.type = TYPE_NORMAL;
         // Update the sequence number
-        f->header.seq_num = e->next_tx_seq;
+        tloe_seqnum_set_next_tx_seq(f, e);
         // Update the sequence number of the ack
-        f->header.seq_num_ack = e->acked_seq;
+        tloe_seqnum_set_frame_seq_num_ack(f, e->acked_seq);
         // Set the ack to TLOE_ACK
         f->header.ack = TLOE_ACK;
         // Set the mask to indicate normal packet
@@ -35,14 +39,14 @@ static void serve_open_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
         // Free tloe_frame_t 
         free(f);
     }
-    // Update sequence numbers
-    e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->header.seq_num);
-    e->acked_seq = recv_tloeframe->header.seq_num_ack;
 }
 
 static void serve_close_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
     char send_buffer[MAX_BUFFER_SIZE];
 
+    // Update sequence numbers
+    tloe_seqnum_update_next_rx_seq(e, recv_tloeframe);
+    tloe_seqnum_update_acked_seq(e, recv_tloeframe);
     // If slave, send chan/credit message
     if (e->master == 0) {
         tloe_frame_t *f = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
@@ -51,9 +55,9 @@ static void serve_close_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
         // Set Open Connection
         f->header.type = TYPE_CLOSE_CONNECTION;
         // Update the sequence number
-        f->header.seq_num = e->next_tx_seq;
+        tloe_seqnum_set_next_tx_seq(f, e);
         // Update the sequence number of the ack
-        f->header.seq_num_ack = e->acked_seq;
+        tloe_seqnum_set_frame_seq_num_ack(f, e->acked_seq);
         // Set the ack to TLOE_ACK
         f->header.ack = TLOE_ACK;
         // Set the mask to indicate normal packet
@@ -70,10 +74,7 @@ static void serve_close_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
         e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
         // Free tloe_frame_t 
         free(f);
-   }
-    // Update sequence numbers
-    e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->header.seq_num);
-    e->acked_seq = recv_tloeframe->header.seq_num_ack;
+    }
 }
 
 static void send_conn_frame(tloe_endpoint_t *e) {
@@ -83,8 +84,8 @@ static void send_conn_frame(tloe_endpoint_t *e) {
         tloe_frame_t tloeframe;
         memset(&tloeframe, 0, sizeof(tloeframe));
 
-        tloeframe.header.seq_num = i-1;
-        tloeframe.header.seq_num_ack = e->acked_seq;
+        tloe_seqnum_set_seq_num(&tloeframe, i - 1);
+        tloe_seqnum_set_frame_seq_num_ack(&tloeframe, e->acked_seq);
         tloeframe.header.type = (i == CHANNEL_A ? TYPE_OPEN_CONNECTION : TYPE_NORMAL);
         tloeframe.header.ack = TLOE_ACK;
         tloeframe.header.chan = i;
@@ -123,8 +124,8 @@ static int recv_conn_frame(tloe_endpoint_t *e) {
             memset(&tloeframe, 0, sizeof(tloeframe));
             e->next_tx_seq = CHANNEL_NUM - 1;
 
-            tloeframe.header.seq_num = e->next_tx_seq;
-            tloeframe.header.seq_num_ack = tloe_seqnum_prev(e->next_rx_seq);
+            // Update sequence number
+            tloe_seqnum_set_next_and_acked_seq(&tloeframe, e);
             tloeframe.header.type = TYPE_NORMAL;
             tloeframe.header.ack = TLOE_ACK;
 
@@ -161,9 +162,10 @@ static void wait_ackonly_frame(tloe_endpoint_t *e) {
             // Convert packet into tloe_frame
             packet_to_tloe_frame(recv_buffer, size, &recv_tloeframe);
             if (is_ackonly_frame(&recv_tloeframe))
+
                 e->next_rx_seq = recv_tloeframe.header.seq_num;
                 e->acked_seq = recv_tloeframe.header.seq_num_ack;
-                //TODO
+
                 break;
         }
     }
@@ -242,8 +244,7 @@ void close_conn_master(tloe_endpoint_t *e) {
         tloe_frame_t tloeframe;
         memset(&tloeframe, 0, sizeof(tloeframe));
 
-        tloeframe.header.seq_num = e->next_tx_seq;
-        tloeframe.header.seq_num_ack = e->acked_seq;
+        tloe_seqnum_set_next_and_acked_seq(&tloeframe, e);
         tloeframe.header.type = TYPE_CLOSE_CONNECTION;
         tloeframe.header.chan = 0;
         tloeframe.header.credit = 0;

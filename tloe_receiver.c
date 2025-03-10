@@ -7,6 +7,7 @@
 #include "tloe_endpoint.h"
 #include "tloe_common.h"
 #include "tloe_connection.h"
+#include "tloe_seq_mgr.h"
 #include "retransmission.h"
 #include "timeout.h"
 
@@ -31,16 +32,6 @@ static int add_channel_flow_credits(tloe_endpoint_t *e, int channel, int total_f
     e->fc.tx_flow_credits[channel] += total_flits;
 }
 
-static void update_next_rx_seq(tloe_endpoint_t *e, tloe_frame_t *frame) {
-    e->next_rx_seq = tloe_seqnum_next(frame->header.seq_num);
-}
-
-static void update_acked_seq(tloe_endpoint_t *e, tloe_frame_t *frame) {
-    if (tloe_seqnum_cmp(frame->header.seq_num_ack, e->acked_seq) > 0) {
-        e->acked_seq = frame->header.seq_num_ack;
-    }
-}
-
 static void update_flow_control_credits(tloe_endpoint_t *e, tloe_frame_t *frame) {
     int prev_credit = e->fc.credits[frame->header.chan];
     int inc_credit = fc_credit_inc(&(e->fc), frame);
@@ -63,8 +54,8 @@ static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe
     tl_msg_t *tlmsg;
 
     // Update sequence numbers
-    update_next_rx_seq(e, recv_tloeframe);
-    update_acked_seq(e, recv_tloeframe);
+    tloe_seqnum_update_next_rx_seq(e, recv_tloeframe);
+    tloe_seqnum_update_acked_seq(e, recv_tloeframe);
 
     // Find tlmsgs from mask
     mask = tloe_get_mask(recv_tloeframe, f_size);
@@ -98,8 +89,9 @@ static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe
 
 static int serve_zero_tlmsg_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
     // Update sequence numbers
-    update_next_rx_seq(e, recv_tloeframe);
-    update_acked_seq(e, recv_tloeframe);
+    tloe_seqnum_update_next_rx_seq(e, recv_tloeframe);
+    tloe_seqnum_update_acked_seq(e, recv_tloeframe);
+
     // Set for sending ackonly
     e->should_send_ackonly_frame = true;
     // Increase credit
@@ -143,10 +135,10 @@ static void serve_oos_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, 
             recv_tloeframe->header.seq_num, e->next_rx_seq, last_proper_rx_seq);
 
     // If the received frame contains data, enqueue it in the message buffer
-    BUG_ON(is_zero_tl_frame(recv_tloeframe, size), "received frame must not be an ack frame.");
+    //BUG_ON(is_zero_tl_frame(recv_tloeframe, size), "received frame must not be an ack frame.");
 
     *tloeframe = *recv_tloeframe;
-    tloeframe->header.seq_num_ack = last_proper_rx_seq;
+    tloe_seqnum_set_frame_seq_num_ack(tloeframe, last_proper_rx_seq);
     tloeframe->header.ack = TLOE_NAK;  // NAK
     tloe_set_mask(tloeframe, 0, size);
     tloeframe->header.chan = 0;
@@ -192,7 +184,7 @@ void RX(tloe_endpoint_t *e) {
 
     // ACK/NAK (ACKONLY frame, spec 1.1)
     if (is_ackonly_frame(recv_tloeframe)) {
-        update_acked_seq(e, recv_tloeframe);
+        tloe_seqnum_update_acked_seq(e, recv_tloeframe);
         free(recv_tloeframe);
         goto out;
     }

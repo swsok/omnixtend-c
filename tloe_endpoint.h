@@ -64,47 +64,6 @@ typedef struct tloe_endpoint_struct {
 	int drop_response_cnt;
 } tloe_endpoint_t;
 
-typedef enum {
-	REQ_NORMAL = 0,
-	REQ_DUPLICATE,
-	REQ_OOS,
-} tloe_rx_req_type_t;
-
-static inline int tloe_seqnum_cmp(uint32_t a, uint32_t b) {
-    int diff = (int)a - (int)b;  // 두 값의 차이 계산
-
-    if (diff == 0) {
-        return 0;  // 두 값이 동일
-    }
-    
-    // wrap-around 판단: HALF_MAX_SEQ_NUM 기준으로 앞/뒤 판별
-    if (diff > 0) {
-        return (diff < HALF_MAX_SEQ_NUM) ? 1 : -1;    // b(100)...a(200);   a(1020)...b(3)
-    } else {
-        return (-diff < HALF_MAX_SEQ_NUM) ? -1 : 1;
-    }
-}
-
-static inline uint32_t tloe_seqnum_prev(uint32_t seq_num) {
-	int t = (int)seq_num - 1;
-	if (t < 0) 
-		t = MAX_SEQ_NUM;
-	return (uint32_t)t;
-}
-
-static inline uint32_t tloe_seqnum_next(uint32_t seq_num) {
-	return (seq_num + 1) & MAX_SEQ_NUM;
-}
-
-static inline tloe_rx_req_type_t tloe_rx_get_req_type(tloe_endpoint_t *e, tloe_frame_t *f) {
-	int diff_seq = tloe_seqnum_cmp(f->header.seq_num, e->next_rx_seq);
-	if (diff_seq == 0)
-		return REQ_NORMAL;
-	else if (diff_seq < 0)
-		return REQ_DUPLICATE;
-	return REQ_OOS;
-}
-
 static inline void print_payload(char *data, int size) {
     int i, j;
 

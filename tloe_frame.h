@@ -32,10 +32,6 @@ typedef struct __attribute__((packed,aligned(8))) {
     uint64_t flits[MAX_SIZE_FLIT];
 } tloe_frame_t;
 
-int tloe_set_seq_num(tloe_frame_t *, int);
-int tloe_get_seq_num(tloe_frame_t *);
-int tloe_set_seq_num_ack(tloe_frame_t *, int);
-int tloe_get_seq_num_ack(tloe_frame_t *);
 int tloe_set_ack(tloe_frame_t *, int);
 int tloe_get_ack(tloe_frame_t *);
 uint64_t tloe_set_mask(tloe_frame_t *, int, int);

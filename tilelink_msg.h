@@ -66,14 +66,7 @@ typedef struct {
 
 typedef struct {
     tl_header_t header;
-#if 0
-    uint64_t address;      // 채널 A, B, C에서 사용
-    uint64_t reserved1:38; // 채널 D에서 사용 (Grant)
-    uint64_t sink:26;      // 채널 D, E에서 사용
-    uint8_t data[0];        // 가변 데이터 (AccessAckData, GrantData 등)
-#else
     uint64_t data[0];
-#endif
 } tl_msg_t;
 
 typedef struct tilelink_message_abc_struct {

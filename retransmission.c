@@ -1,6 +1,7 @@
 #include "retransmission.h"
 #include "tloe_endpoint.h"
 #include "tloe_common.h"
+#include "tloe_seq_mgr.h"
 
 int retransmit(tloe_endpoint_t *e, int seq_num) {
     TloeEther *ether = (TloeEther *)e->fabric_ops.handle;
@@ -17,7 +18,8 @@ int retransmit(tloe_endpoint_t *e, int seq_num) {
             continue;
 
         frame = element->tloe_frame;
-        frame.header.seq_num_ack = tloe_seqnum_prev(e->next_rx_seq);
+        
+        tloe_seqnum_set_seq_num_ack(&frame, e);
 
         fprintf(stderr, "Retransmission with num_seq: %d\n", frame.header.seq_num);
         // Convert tloe_frame into packet

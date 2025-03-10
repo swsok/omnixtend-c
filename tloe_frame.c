@@ -5,24 +5,6 @@
 #include "tloe_common.h"
 #include "tilelink_msg.h"
 
-int tloe_set_seq_num(tloe_frame_t *frame, int seq_num) {
-    frame->header.seq_num = seq_num;
-    return seq_num;
-}
-
-int tloe_get_seq_num(tloe_frame_t *frame) {
-    return frame->header.seq_num;
-}
-
-int tloe_set_seq_num_ack(tloe_frame_t *frame, int seq_num) {
-    frame->header.seq_num_ack = seq_num;
-    return seq_num;
-}
-
-int tloe_get_seq_num_ack(tloe_frame_t *frame) {
-    return frame->header.seq_num_ack;
-}
-
 int tloe_set_ack(tloe_frame_t *frame, int ack) {
     frame->header.ack = ack;
     return ack;
