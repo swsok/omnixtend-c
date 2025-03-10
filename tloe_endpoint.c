@@ -39,17 +39,14 @@ static void tloe_endpoint_init(tloe_endpoint_t *e, int fabric_type, int master_s
 	e->next_tx_seq = 0;
 	e->next_rx_seq = 0;
 	e->acked_seq = MAX_SEQ_NUM;
-	e->acked = 0;
 
     if (e->retransmit_buffer != NULL) delete_queue(e->retransmit_buffer);
-    if (e->rx_buffer != NULL) delete_queue(e->rx_buffer);
 	if (e->message_buffer != NULL) delete_queue(e->message_buffer);
 	if (e->ack_buffer != NULL) delete_queue(e->ack_buffer);
 	if (e->tl_msg_buffer != NULL) delete_queue(e->tl_msg_buffer);
 	if (e->response_buffer != NULL) delete_queue(e->response_buffer);
 
     e->retransmit_buffer = create_queue(WINDOW_SIZE + 1);
-    e->rx_buffer = create_queue(10); // credits
 	e->message_buffer = create_queue(10000);
 	e->ack_buffer = create_queue(2048);
 	e->tl_msg_buffer = create_queue(10000);
@@ -63,28 +60,23 @@ static void tloe_endpoint_init(tloe_endpoint_t *e, int fabric_type, int master_s
 	e->ack_cnt = 0;
 	e->dup_cnt = 0;
 	e->oos_cnt = 0;
-	e->delay_cnt = 0;
 	e->drop_cnt = 0;
 
-	e->drop_npacket_size = 0;
-	e->drop_npacket_cnt = 0;
-	e->drop_apacket_size = 0;
-	e->drop_apacket_cnt = 0;
+    e->accessack_cnt = 0;
+    e->accessackdata_cnt = 0;
 
 	e->fc_inc_cnt = 0;
 	e->fc_inc_value = 0;
 	e->fc_dec_cnt = 0;
 	e->fc_dec_value = 0;
 
+    e->ackonly_cnt = 0;
+
 	e->drop_tlmsg_cnt = 0;
 	e->drop_response_cnt = 0;
 
-    e->accessack_cnt = 0;
-    e->accessackdata_cnt = 0;
-
-    e->close_flag = 0;
-
-    e->ackonly_cnt = 0;
+	e->drop_npacket_size = 0;
+	e->drop_npacket_cnt = 0;
 }
 
 static void tloe_endpoint_close(tloe_endpoint_t *e) {
@@ -100,7 +92,6 @@ static void tloe_endpoint_close(tloe_endpoint_t *e) {
     // Cleanup queues
     delete_queue(e->message_buffer);
     delete_queue(e->retransmit_buffer);
-    delete_queue(e->rx_buffer);
     delete_queue(e->ack_buffer);
 	delete_queue(e->tl_msg_buffer);
 	delete_queue(e->response_buffer);
@@ -156,8 +147,7 @@ static void print_endpoint_status(tloe_endpoint_t *e) {
             " TX: %d(0x%x), RX: %d(0x%x)\n"
             "\nPacket Statistics:\n"
             " ACK: %d, Duplicate: %d, Out-of-Sequence: %d\n"
-            " Delayed: %d, Dropped: %d (Normal: %d, ACK: %d)\n"
-            " Estimated ACK on the other side: %d\n"
+            " Dropped: %d (Normal: %d)\n"
             " ACKONLY: %d\n"
             "Channel Credits [0|A|B|C|D|E]: %d|%d|%d|%d|%d|%d\n"
             " Flow Control (Inc/Value, Dec/Value): %d/%d, %d/%d\n"
@@ -169,8 +159,7 @@ static void print_endpoint_status(tloe_endpoint_t *e) {
             "-----------------------------------------------------\n",
             e->next_tx_seq, e->next_tx_seq, e->next_rx_seq, e->next_rx_seq,
             e->ack_cnt, e->dup_cnt, e->oos_cnt,
-            e->delay_cnt, e->drop_cnt, e->drop_npacket_cnt, e->drop_apacket_cnt,
-            e->next_rx_seq-e->delay_cnt+e->oos_cnt+e->dup_cnt-e->drop_apacket_cnt,
+            e->drop_cnt, e->drop_npacket_cnt, 
             e->ackonly_cnt,
             e->fc.credits[0], e->fc.credits[CHANNEL_A], e->fc.credits[CHANNEL_B], 
             e->fc.credits[CHANNEL_C], e->fc.credits[CHANNEL_D], 

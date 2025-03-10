@@ -5,10 +5,12 @@
 
 #define TLOE_NAK              0
 #define TLOE_ACK              1
+
 #define TYPE_NORMAL           0
 #define TYPE_ACKONLY          1
 #define TYPE_OPEN_CONNECTION  2
 #define TYPE_CLOSE_CONNECTION 3
+
 #define MAX_SIZE_FLIT         65
 #define DEFAULT_FRAME_SIZE    (8 * 7)  // sizeof(uint64_t) * (tloeheader + padding*5 + mask)
 

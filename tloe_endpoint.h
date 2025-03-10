@@ -19,7 +19,6 @@ typedef struct tloe_endpoint_struct {
 	tloe_fabric_ops_t fabric_ops; // Current media operations in use
 
 	CircularQueue *retransmit_buffer;
-	CircularQueue *rx_buffer;
 	CircularQueue *message_buffer;
 	CircularQueue *ack_buffer;
 	CircularQueue *tl_msg_buffer;
@@ -39,7 +38,6 @@ typedef struct tloe_endpoint_struct {
 	int next_tx_seq;
 	int next_rx_seq;
 	uint32_t acked_seq;
-	int acked;
 
     bool should_send_ackonly_frame;
     bool ackonly_frame_sent;
@@ -47,28 +45,23 @@ typedef struct tloe_endpoint_struct {
 	int ack_cnt;
 	int dup_cnt;
 	int oos_cnt;
-	int delay_cnt;
 	int drop_cnt;
 
-	int drop_npacket_size;
-	int drop_npacket_cnt;
-	int drop_apacket_size;
-	int drop_apacket_cnt;
+    int accessack_cnt;
+    int accessackdata_cnt;
 
 	int fc_inc_cnt;
 	int fc_inc_value;
 	int fc_dec_cnt;
 	int fc_dec_value;
 
+    int ackonly_cnt;
+
+	int drop_npacket_size;
+	int drop_npacket_cnt;
+
 	int drop_tlmsg_cnt;
 	int drop_response_cnt;
-
-    int accessack_cnt;
-    int accessackdata_cnt;
-
-    int close_flag;
-
-    int ackonly_cnt;
 } tloe_endpoint_t;
 
 typedef enum {
