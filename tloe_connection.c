@@ -34,8 +34,6 @@ static void serve_open_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
         e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
         // Free tloe_frame_t 
         free(f);
-
-        init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
     }
     // Update sequence numbers
     e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->header.seq_num);
@@ -72,8 +70,6 @@ static void serve_close_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
         e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
         // Free tloe_frame_t 
         free(f);
-
-        init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
    }
     // Update sequence numbers
     e->next_rx_seq = tloe_seqnum_next(recv_tloeframe->header.seq_num);

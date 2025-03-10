@@ -62,9 +62,6 @@ static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe
     uint64_t mask;
     tl_msg_t *tlmsg;
 
-    e->timeout_rx.ack_time = get_current_timestamp(&(e->iteration_ts));
-    e->timeout_rx.last_ack_seq = recv_tloeframe->header.seq_num;
-
     // Update sequence numbers
     update_next_rx_seq(e, recv_tloeframe);
     update_acked_seq(e, recv_tloeframe);
@@ -156,8 +153,6 @@ static void serve_oos_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, 
     tloeframe->header.credit = 0; 
     enqueued = enqueue(e->ack_buffer, (void *) tloeframe);
     BUG_ON(!enqueued, "failed to enqueue ack frame.");
-
-    init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
 
     e->oos_cnt++;
 }

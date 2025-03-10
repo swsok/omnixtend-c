@@ -58,7 +58,6 @@ static void tloe_endpoint_init(tloe_endpoint_t *e, int fabric_type, int master_s
     e->should_send_ackonly_frame = false;
     e->ackonly_frame_sent = false;
 
-	init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
 	init_flowcontrol(&(e->fc));
 
 	e->ack_cnt = 0;
