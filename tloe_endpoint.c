@@ -260,21 +260,30 @@ static int handle_user_input(tloe_endpoint_t *e, char input, int args1,
         }
     } else if (input == 'c') {
         int is_conn = 0;
-        if (e->master == TYPE_MASTER)
+        if (e->master == TYPE_MASTER) {
             is_conn = open_conn_master(e);
-        else if (e->master == TYPE_SLAVE)
-            open_conn_slave(e);
+        } else if (e->master == TYPE_SLAVE) {
+            is_conn = open_conn_slave(e);
+        }
 
         if (is_conn) {
             printf("Open connection complete.\n");
             e->connection = 1;
         }
     } else if (input == 'd') {
+        int is_conn = 0;
+
+        e->connection = 0;
         if (e->master == TYPE_MASTER)
-            close_conn_master(e);
+            is_conn = close_conn_master(e);
         else if (e->master == TYPE_SLAVE)
-            close_conn_slave(e);
-        printf("Close connection complete.\n");
+            is_conn = close_conn_slave(e);
+
+        if (is_conn) {
+            printf("Close connection complete.\n");
+            tl_handler_init();
+            tloe_endpoint_init(e, fabric_type, master);
+        }
     } else if (input == 'r') {
         if (!is_conn(e)) return 0;
         if (args1 == 0) return 0; 

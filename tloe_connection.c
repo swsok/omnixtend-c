@@ -3,284 +3,273 @@
 #include "tloe_seq_mgr.h"
 #include "flowcontrol.h"
 
-static void serve_open_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
+static void send_frame(tloe_endpoint_t *e, int type, uint32_t seq_num, uint32_t seq_num_ack, int chan, int credit) {
+    tloe_frame_t f;
+    memset((void *)&f, 0, sizeof(tloe_frame_t));
     char send_buffer[MAX_BUFFER_SIZE];
-    // Set credits
-    set_credit(&(e->fc), recv_tloeframe->header.chan, recv_tloeframe->header.credit);
-    // Update sequence numbers
-    tloe_seqnum_update_next_rx_seq(e, recv_tloeframe);
-    tloe_seqnum_update_acked_seq(e, recv_tloeframe);
 
-    // If slave, send chan/credit message
-    if (e->master == 0) {
-        tloe_frame_t *f = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
-        memset((void *)f, 0, sizeof(tloe_frame_t));
+    // Set Open Connection
+    f.header.type = type;
+    // Update the sequence number
+    //tloe_seqnum_set_next_tx_seq(&f, e);
+    f.header.seq_num = seq_num;
+    // Update the sequence number of the ack
+    //tloe_seqnum_set_frame_seq_num_ack(&f, e->acked_seq);
+    f.header.seq_num_ack = seq_num_ack;
+    // Set the ack to TLOE_ACK
+    f.header.ack = TLOE_ACK;
+    // Set the mask to indicate normal packet
+    tloe_set_mask(&f, 0, CONN_PACKET_SIZE);
+    // Set 0 to channel and credit
+    f.header.chan = chan;
+    f.header.credit = credit;
+    // Convert tloe_frame into packet
+    tloe_frame_to_packet((tloe_frame_t *)&f, send_buffer, CONN_PACKET_SIZE);
+    // Send the request_normal_frame using the ether
+    tloe_fabric_send(e, send_buffer, CONN_PACKET_SIZE);
+}
 
-        // Set Open Connection
-        f->header.type = TYPE_NORMAL;
-        // Update the sequence number
-        tloe_seqnum_set_next_tx_seq(f, e);
-        // Update the sequence number of the ack
-        tloe_seqnum_set_frame_seq_num_ack(f, e->acked_seq);
-        // Set the ack to TLOE_ACK
-        f->header.ack = TLOE_ACK;
-        // Set the mask to indicate normal packet
-        tloe_set_mask(f, 0, CONN_PACKET_SIZE);
-        // Set 0 to channel and credit
-        f->header.chan = recv_tloeframe->header.chan;
-        f->header.credit = CREDIT_DEFAULT;
-        // Convert tloe_frame into packet
-        tloe_frame_to_packet((tloe_frame_t *)f, send_buffer, CONN_PACKET_SIZE);
-        // Send the request_normal_frame using the ether
-        tloe_fabric_send(e, send_buffer, CONN_PACKET_SIZE);
+////////
+// Open Connection
 
-        // increase the sequence number of the endpoint
-        e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
-        // Free tloe_frame_t 
-        free(f);
+static void recv_conn_master(tloe_endpoint_t *ep) {
+    char recv_buffer[MAX_BUFFER_SIZE];
+    int size;
+
+    size = tloe_fabric_recv(ep, recv_buffer, sizeof(recv_buffer));
+    if (size >= 0) {
+        tloe_frame_t recv_tloeframe;
+
+        // Convert packet into tloe_frame
+        packet_to_tloe_frame(recv_buffer, size, &recv_tloeframe);
+
+        // Set credits
+        if(tloe_seqnum_cmp(recv_tloeframe.header.seq_num, ep->next_rx_seq) == 0) {
+            set_credit(&(ep->fc), recv_tloeframe.header.chan, recv_tloeframe.header.credit);
+            // Update sequence numbers
+            tloe_seqnum_update_next_rx_seq(ep, &recv_tloeframe);
+            tloe_seqnum_update_acked_seq(ep, &recv_tloeframe);
+        }
     }
 }
 
-static void serve_close_conn(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
-    char send_buffer[MAX_BUFFER_SIZE];
+static int recv_conn_slave(tloe_endpoint_t *ep, int conn_flag) {
+    char recv_buffer[MAX_BUFFER_SIZE];
+    int size;
 
-    // Update sequence numbers
-    tloe_seqnum_update_next_rx_seq(e, recv_tloeframe);
-    tloe_seqnum_update_acked_seq(e, recv_tloeframe);
-    // If slave, send chan/credit message
-    if (e->master == 0) {
-        tloe_frame_t *f = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
-        memset((void *)f, 0, sizeof(tloe_frame_t));
+    size = tloe_fabric_recv(ep, recv_buffer, sizeof(recv_buffer));
+    if (size >= 0) {
+        tloe_frame_t recv_tloeframe;
 
-        // Set Open Connection
-        f->header.type = TYPE_CLOSE_CONNECTION;
-        // Update the sequence number
-        tloe_seqnum_set_next_tx_seq(f, e);
-        // Update the sequence number of the ack
-        tloe_seqnum_set_frame_seq_num_ack(f, e->acked_seq);
-        // Set the ack to TLOE_ACK
-        f->header.ack = TLOE_ACK;
-        // Set the mask to indicate normal packet
-        tloe_set_mask(f, 0, CONN_PACKET_SIZE);
-        // Set 0 to channel and credit
-        f->header.chan = 0;
-        f->header.credit = 0;
-        // Convert tloe_frame into packet
-        tloe_frame_to_packet((tloe_frame_t *)f, send_buffer, sizeof(tloe_frame_t));
-        // Send the request_normal_frame using the ether
-        tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
+        // Convert packet into tloe_frame
+        packet_to_tloe_frame(recv_buffer, size, &recv_tloeframe);
 
-        // increase the sequence number of the endpoint
-        e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
-        // Free tloe_frame_t 
-        free(f);
+        if (recv_tloeframe.header.type == TYPE_OPEN_CONNECTION) {
+            conn_flag = 1;
+        }
+
+        if (conn_flag) {  
+            set_credit(&(ep->fc), recv_tloeframe.header.chan, recv_tloeframe.header.credit);
+            // Update sequence numbers
+            tloe_seqnum_update_next_rx_seq(ep, &recv_tloeframe);
+            tloe_seqnum_update_acked_seq(ep, &recv_tloeframe);
+        }
     }
+
+    return conn_flag;
 }
 
-static void send_conn_frame(tloe_endpoint_t *e) {
+static void serve_conn_master(tloe_endpoint_t *ep) {
     char send_buffer[MAX_BUFFER_SIZE];
 
     for (int i = 1; i < CHANNEL_NUM; i++) {
         tloe_frame_t tloeframe;
         memset(&tloeframe, 0, sizeof(tloeframe));
 
-        tloe_seqnum_set_seq_num(&tloeframe, i - 1);
-        tloe_seqnum_set_frame_seq_num_ack(&tloeframe, e->acked_seq);
-        tloeframe.header.type = (i == CHANNEL_A ? TYPE_OPEN_CONNECTION : TYPE_NORMAL);
-        tloeframe.header.ack = TLOE_ACK;
-        tloeframe.header.chan = i;
-        tloeframe.header.credit = CREDIT_DEFAULT;
-        tloe_set_mask(&tloeframe, 0, CONN_PACKET_SIZE);
+        send_frame(ep, (i == CHANNEL_A ? TYPE_OPEN_CONNECTION : TYPE_NORMAL), 
+                i-1, tloe_seqnum_prev(ep->next_rx_seq), i, CREDIT_DEFAULT);
 
-        // Convert tloe_frame into packet
-        tloe_frame_to_packet(&tloeframe, send_buffer, CONN_PACKET_SIZE);
-        tloe_fabric_send(e, send_buffer, CONN_PACKET_SIZE);
+        ep->next_tx_seq = i;
     }
 }
 
-static int recv_conn_frame(tloe_endpoint_t *e) {
-    char recv_buffer[MAX_BUFFER_SIZE];
+static void serve_conn_slave(tloe_endpoint_t *ep) {
     char send_buffer[MAX_BUFFER_SIZE];
-    tloe_frame_t recv_tloeframe;
-    int result = 0;
-    int size;
+
+    for (int i = 1; i < CHANNEL_NUM; i++) {
+        tloe_frame_t tloeframe;
+        memset(&tloeframe, 0, sizeof(tloeframe));
+
+        send_frame(ep, TYPE_NORMAL, i-1, tloe_seqnum_prev(ep->next_rx_seq), i, CREDIT_DEFAULT);
+
+        ep->next_tx_seq = i;
+    }
+}
+
+static int check_timer(struct timespec *start) {
+    struct timespec now;
     long elapsed_us;
-    struct timespec ts, start, now;
-    clock_gettime(CLOCK_MONOTONIC, &start);
 
-    while (1) {
-        size = tloe_fabric_recv(e, recv_buffer, sizeof(recv_buffer));
-        if (size >= 0) {
-            // Convert packet into tloe_frame
-            packet_to_tloe_frame(recv_buffer, size, &recv_tloeframe);
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    elapsed_us = (now.tv_sec - start->tv_sec) * 1000000L + (now.tv_nsec - start->tv_nsec) / 1000L;
 
-            if(tloe_seqnum_cmp(recv_tloeframe.header.seq_num, e->next_rx_seq) == 0) {
-                serve_open_conn(e, &recv_tloeframe);
-            }
-        }
-
-        if (!check_all_channels(&(e->fc))) {
-            tloe_frame_t tloeframe;
-            memset(&tloeframe, 0, sizeof(tloeframe));
-            e->next_tx_seq = CHANNEL_NUM - 1;
-
-            // Update sequence number
-            tloe_seqnum_set_next_and_acked_seq(&tloeframe, e);
-            tloeframe.header.type = TYPE_NORMAL;
-            tloeframe.header.ack = TLOE_ACK;
-
-            // Convert tloe_frame into packet
-            tloe_frame_to_packet(&tloeframe, send_buffer, CONN_PACKET_SIZE);
-            tloe_fabric_send(e, send_buffer, CONN_PACKET_SIZE);
-
-            e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
-
-            result = 1;
-            goto out;
-        }
-
-        clock_gettime(CLOCK_MONOTONIC, &now);
-        elapsed_us = (now.tv_sec - start.tv_sec) * 1000000L + (now.tv_nsec - start.tv_nsec) / 1000L;
-
-        if (elapsed_us >= CONN_RESEND_TIME) {
-            goto out;
-        }
-        usleep(100);
-    }
-out:
-    return result;
+    if (elapsed_us >= CONN_RESEND_TIME) 
+        return 1;
+    
+    return 0;
 }
 
-static void wait_ackonly_frame(tloe_endpoint_t *e) {
-    int size;
-    char recv_buffer[MAX_BUFFER_SIZE];
-    tloe_frame_t recv_tloeframe;
-
-    while (1) {
-        size = tloe_fabric_recv(e, recv_buffer, sizeof(recv_buffer));
-        if (size >= 0) {
-            // Convert packet into tloe_frame
-            packet_to_tloe_frame(recv_buffer, size, &recv_tloeframe);
-            if (is_ackonly_frame(&recv_tloeframe))
-
-                e->next_rx_seq = recv_tloeframe.header.seq_num;
-                e->acked_seq = recv_tloeframe.header.seq_num_ack;
-
-                break;
-        }
-    }
-}
-
-int open_conn_master(tloe_endpoint_t *e) {
+int open_conn_master(tloe_endpoint_t *ep) {
     int is_done = 0;
+    struct timespec start, now;
+    int timer = 1;
 
     while (!is_done) {
-        // Send open connetion to every channel
-        send_conn_frame(e);
+        if (timer == 1) {
+            serve_conn_master(ep);
+            clock_gettime(CLOCK_MONOTONIC, &start);
+            timer = 0;
+        }
 
-        // Receive until all channels are filled
-        is_done = recv_conn_frame(e);
+        // Receive packet and set credit
+        recv_conn_master(ep);
+
+        is_done = check_all_channels(&(ep->fc));
+
+        timer = check_timer(&start);
     }
-    wait_ackonly_frame(e);
+
+    send_frame(ep, TYPE_NORMAL, ep->next_tx_seq, tloe_seqnum_prev(ep->next_rx_seq), 0, 0);
 
     return is_done;
 }
  
-void open_conn_slave(tloe_endpoint_t *e) {
-    int size;
-    char recv_buffer[MAX_BUFFER_SIZE];
-    tloe_frame_t recv_tloeframe;
+int open_conn_slave(tloe_endpoint_t *ep) {
+    int is_done = 0;
+    int conn_flag = 0;
+    struct timespec start, now;
+    int timer = 1;
 
     printf("Wait until all channels have their credits set.....\n");
-    while (check_all_channels(&(e->fc))) {
-        size = tloe_fabric_recv(e, recv_buffer, sizeof(recv_buffer));
-        if (size < 0) {
-            //usleep(1000);
-            continue;
+
+    while (!is_done) {
+        if (conn_flag && timer == 1) {
+            serve_conn_slave(ep);
+            clock_gettime(CLOCK_MONOTONIC, &start);
+            timer = 0;
         }
 
-        // Convert packet into tloe_frame
-        packet_to_tloe_frame(recv_buffer, size, &recv_tloeframe);
+        conn_flag = recv_conn_slave(ep, conn_flag);
 
-        if (is_conn_msg(&recv_tloeframe)) {
-            serve_open_conn(e, &recv_tloeframe);
-        }
+        is_done = check_all_channels(&(ep->fc));
+
+        timer = check_timer(&start);
     }
-    e->connection = 1;
+
+    send_frame(ep, TYPE_ACKONLY, ep->next_tx_seq, tloe_seqnum_prev(ep->next_rx_seq), 0, 0);
+
+    return is_done;
 }
 
-void close_conn_master(tloe_endpoint_t *e) {
-    int size;
+////////
+// Close Connection
+
+static void serve_close_conn(tloe_endpoint_t *ep) {
     char send_buffer[MAX_BUFFER_SIZE];
-    char recv_buffer[MAX_BUFFER_SIZE];
-    tloe_frame_t recv_tloeframe;
-    struct timespec ts, start, now;
-    e->connection = 0;
 
-    while (1) {
-        clock_gettime(CLOCK_MONOTONIC, &start);
+    tloe_frame_t tloeframe;
+    memset(&tloeframe, 0, sizeof(tloeframe));
 
-        while (1) {
-            size = tloe_fabric_recv(e, recv_buffer, sizeof(recv_buffer));
-            if (size >= 0) {
-                // Convert packet into tloe_frame
-                packet_to_tloe_frame(recv_buffer, size, &recv_tloeframe);
-
-                if (is_conn_msg(&recv_tloeframe) == TYPE_CLOSE_CONNECTION) {
-                    serve_close_conn(e, &recv_tloeframe);
-                    goto out;
-                }
-            }
-
-            clock_gettime(CLOCK_MONOTONIC, &now);
-            long elapsed_us = (now.tv_sec - start.tv_sec) * 1000000L + (now.tv_nsec - start.tv_nsec) / 1000L;
-
-            if (elapsed_us >= TIMEOUT_TIME) {
-                break;
-            }
-            usleep(100);
-        }
-
-        tloe_frame_t tloeframe;
-        memset(&tloeframe, 0, sizeof(tloeframe));
-
-        tloe_seqnum_set_next_and_acked_seq(&tloeframe, e);
-        tloeframe.header.type = TYPE_CLOSE_CONNECTION;
-        tloeframe.header.chan = 0;
-        tloeframe.header.credit = 0;
-        tloe_set_mask(&tloeframe, 0, size);
-
-        // Convert tloe_frame into packet
-        tloe_frame_to_packet(&tloeframe, send_buffer, sizeof(tloe_frame_t));
-        tloe_fabric_send(e, send_buffer, sizeof(tloe_frame_t));
-
-        e->next_tx_seq = tloe_seqnum_next(e->next_tx_seq);
-    }
-out:
+    send_frame(ep, TYPE_CLOSE_CONNECTION, ep->next_tx_seq, tloe_seqnum_prev(ep->next_rx_seq), 0, 0);
 }
 
-void close_conn_slave(tloe_endpoint_t *e) {
-    int size;
+static int recv_close_conn_master(tloe_endpoint_t *ep) {
     char recv_buffer[MAX_BUFFER_SIZE];
-    tloe_frame_t recv_tloeframe;
-    e->connection = 0;
+    int size;
+    int result = 0;
 
-    printf("Wait until the connection is closed.\n");
-    while (1) {
-        size = tloe_fabric_recv(e, recv_buffer, sizeof(recv_buffer));
-        if (size < 0) {
-            //usleep(1000);
-            continue;
-        }
+    size = tloe_fabric_recv(ep, recv_buffer, sizeof(recv_buffer));
+    if (size >= 0) {
+        tloe_frame_t recv_tloeframe;
 
         // Convert packet into tloe_frame
         packet_to_tloe_frame(recv_buffer, size, &recv_tloeframe);
 
-        if (is_conn_msg(&recv_tloeframe) == TYPE_CLOSE_CONNECTION) {
-            serve_close_conn(e, &recv_tloeframe);
-            break;
+        if (recv_tloeframe.header.type == TYPE_CLOSE_CONNECTION) {
+
+            result = 1;
+
+            // Update sequence numbers
+            ep->next_rx_seq = tloe_seqnum_next(recv_tloeframe.header.seq_num);
+            ep->acked_seq = recv_tloeframe.header.seq_num_ack;
         }
     }
+
+    return result;
+}
+
+static int recv_close_conn_slave(tloe_endpoint_t *ep, int conn_flag) {
+    char recv_buffer[MAX_BUFFER_SIZE];
+    int size;
+    int result = 0;
+
+    size = tloe_fabric_recv(ep, recv_buffer, sizeof(recv_buffer));
+    if (size >= 0) {
+        tloe_frame_t recv_tloeframe;
+
+        // Convert packet into tloe_frame
+        packet_to_tloe_frame(recv_buffer, size, &recv_tloeframe);
+
+        if (recv_tloeframe.header.type == TYPE_CLOSE_CONNECTION) {
+
+            conn_flag = 1;
+
+            if (conn_flag) { 
+                // Update sequence numbers
+                ep->next_rx_seq = tloe_seqnum_next(recv_tloeframe.header.seq_num);
+                ep->acked_seq = recv_tloeframe.header.seq_num_ack;
+            }
+        }
+    }
+
+    return conn_flag;
+}
+
+int close_conn_master(tloe_endpoint_t *ep) {
+    int is_done = 0;
+    struct timespec start, now;
+    int timer = 1;
+
+    while (!is_done) {
+        if (timer == 1) {
+            serve_close_conn(ep);
+            clock_gettime(CLOCK_MONOTONIC, &start);
+            timer = 0;
+        }
+
+        is_done = recv_close_conn_master(ep);
+
+        timer = check_timer(&start);
+    }
+
+    return is_done;
+}
+
+
+int close_conn_slave(tloe_endpoint_t *ep) {
+    int is_done = 0;
+    int conn_flag = 0;
+
+    while (!is_done) {
+        if (conn_flag) {
+            serve_close_conn(ep);
+            is_done = 1;
+        }
+
+        conn_flag = recv_close_conn_slave(ep, conn_flag);
+    }
+
+    return is_done;
 }
 
 int is_conn(tloe_endpoint_t *e) {
