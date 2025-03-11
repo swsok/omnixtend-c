@@ -39,43 +39,39 @@ static void tloe_endpoint_init(tloe_endpoint_t *e, int fabric_type, int master_s
 	e->next_tx_seq = 0;
 	e->next_rx_seq = 0;
 	e->acked_seq = MAX_SEQ_NUM;
-	e->acked = 0;
 
     if (e->retransmit_buffer != NULL) delete_queue(e->retransmit_buffer);
-    if (e->rx_buffer != NULL) delete_queue(e->rx_buffer);
 	if (e->message_buffer != NULL) delete_queue(e->message_buffer);
 	if (e->ack_buffer != NULL) delete_queue(e->ack_buffer);
 	if (e->tl_msg_buffer != NULL) delete_queue(e->tl_msg_buffer);
 	if (e->response_buffer != NULL) delete_queue(e->response_buffer);
 
     e->retransmit_buffer = create_queue(WINDOW_SIZE + 1);
-    e->rx_buffer = create_queue(10); // credits
 	e->message_buffer = create_queue(10000);
-	e->ack_buffer = create_queue(100);
+	e->ack_buffer = create_queue(2048);
 	e->tl_msg_buffer = create_queue(10000);
 	e->response_buffer = create_queue(100);
 
-	init_timeout_rx(&(e->iteration_ts), &(e->timeout_rx));
+    e->should_send_ackonly_frame = false;
+    e->ackonly_frame_sent = false;
+
 	init_flowcontrol(&(e->fc));
 
 	e->ack_cnt = 0;
 	e->dup_cnt = 0;
 	e->oos_cnt = 0;
-	e->delay_cnt = 0;
 	e->drop_cnt = 0;
 
-	e->drop_npacket_size = 0;
-	e->drop_npacket_cnt = 0;
-	e->drop_apacket_size = 0;
-	e->drop_apacket_cnt = 0;
+    e->accessack_cnt = 0;
+    e->accessackdata_cnt = 0;
 
-	e->fc_inc_cnt = 0;
-	e->fc_dec_cnt = 0;
+    e->ackonly_cnt = 0;
 
 	e->drop_tlmsg_cnt = 0;
 	e->drop_response_cnt = 0;
 
-    e->close_flag = 0;
+	e->drop_npacket_size = 0;
+	e->drop_npacket_cnt = 0;
 }
 
 static void tloe_endpoint_close(tloe_endpoint_t *e) {
@@ -91,7 +87,6 @@ static void tloe_endpoint_close(tloe_endpoint_t *e) {
     // Cleanup queues
     delete_queue(e->message_buffer);
     delete_queue(e->retransmit_buffer);
-    delete_queue(e->rx_buffer);
     delete_queue(e->ack_buffer);
 	delete_queue(e->tl_msg_buffer);
 	delete_queue(e->response_buffer);
@@ -143,25 +138,31 @@ void *tloe_endpoint(void *arg) {
 
 static void print_endpoint_status(tloe_endpoint_t *e) {
     printf("-----------------------------------------------------\n"
-           "Sequence Numbers:\n"
-           " TX: %d, RX: %d\n"
-           "\nPacket Statistics:\n"
-           " ACK: %d, Duplicate: %d, Out-of-Sequence: %d\n"
-           " Delayed: %d, Dropped: %d (Normal: %d, ACK: %d)\n"
-	   " Estimated ACK on the other side: %d\n"
-           "Channel Credits [A|B|C|D|E]: %d|%d|%d|%d|%d\n"
-           " Flow Control (Inc/Dec): %d/%d\n"
-           "\nBuffer Drops:\n"
-           " TL Messages: %d, Responses: %d\n"
-           "-----------------------------------------------------\n",
-           e->next_tx_seq, e->next_rx_seq,
-           e->ack_cnt, e->dup_cnt, e->oos_cnt,
-           e->delay_cnt, e->drop_cnt, e->drop_npacket_cnt, e->drop_apacket_cnt,
-	   e->next_rx_seq-e->delay_cnt+e->oos_cnt+e->dup_cnt-e->drop_apacket_cnt,
-           e->fc.credits[CHANNEL_A], e->fc.credits[CHANNEL_B], 
-           e->fc.credits[CHANNEL_C], e->fc.credits[CHANNEL_D], 
-           e->fc.credits[CHANNEL_E], e->fc_inc_cnt, e->fc_dec_cnt,
-           e->drop_tlmsg_cnt, e->drop_response_cnt);
+            "Sequence Numbers:\n"
+            " TX: %d(0x%x), RX: %d(0x%x)\n"
+            "\nPacket Statistics:\n"
+            " ACK: %d, Duplicate: %d, Out-of-Sequence: %d\n"
+            " Dropped: %d (Normal: %d)\n"
+            " ACKONLY: %d\n"
+            "Channel Credits [0|A|B|C|D|E]: %d|%d|%d|%d|%d|%d\n"
+            " Flow Control\n"
+            " [A][%d][%d][%d]    [D][%d][%d][%d]\n"
+            "\nBuffer Drops:\n"
+            " TL Messages: %d, Responses: %d\n"
+            "\nResponse count:\n"
+            " ACCESSACK: %d, ACCESSACK_DATA: %d\n"
+            "-----------------------------------------------------\n",
+            e->next_tx_seq, e->next_tx_seq, e->next_rx_seq, e->next_rx_seq,
+            e->ack_cnt, e->dup_cnt, e->oos_cnt,
+            e->drop_cnt, e->drop_npacket_cnt, 
+            e->ackonly_cnt,
+            e->fc.credits[0], e->fc.credits[CHANNEL_A], e->fc.credits[CHANNEL_B], 
+            e->fc.credits[CHANNEL_C], e->fc.credits[CHANNEL_D], 
+            e->fc.credits[CHANNEL_E],
+            e->fc.inc_cnt[CHANNEL_A], e->fc.dec_cnt[CHANNEL_A], e->fc.inc_value[CHANNEL_A],
+            e->fc.inc_cnt[CHANNEL_D], e->fc.dec_cnt[CHANNEL_D], e->fc.inc_value[CHANNEL_D],
+            e->drop_tlmsg_cnt, e->drop_response_cnt,
+            e->accessack_cnt, e->accessackdata_cnt); 
 }
 
 static int create_and_enqueue_message(tloe_endpoint_t *e, int msg_index) {
@@ -170,6 +171,7 @@ static int create_and_enqueue_message(tloe_endpoint_t *e, int msg_index) {
         printf("Memory allocation failed at packet %d!\n", msg_index);
         return 0;
     }
+    memset((void *) new_tlmsg, 0, sizeof(tl_msg_t));
 
     new_tlmsg->header.chan = CHANNEL_A;
     new_tlmsg->header.opcode = A_GET_OPCODE;
@@ -188,6 +190,47 @@ static int create_and_enqueue_message(tloe_endpoint_t *e, int msg_index) {
     }
 }
 
+static int read_memory(tloe_endpoint_t *e, uint64_t addr) {
+    tl_msg_t *new_tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t) + sizeof(uint64_t) * 1);
+    memset(new_tlmsg, 0, sizeof(tl_msg_t) + sizeof(uint64_t) * 1);
+
+    new_tlmsg->header.chan = CHANNEL_A;
+    new_tlmsg->header.opcode = A_GET_OPCODE;
+    new_tlmsg->data[0] = addr;
+    new_tlmsg->header.size = 3;     //TODO 8byte for test
+
+    while(is_queue_full(e->message_buffer)) 
+        usleep(1000);
+
+    if (enqueue(e->message_buffer, new_tlmsg)) {
+        return 1;
+    } else {
+        free(new_tlmsg);
+        return 0;
+    }
+}
+
+static int write_memory(tloe_endpoint_t *e, uint64_t addr, uint64_t value) {
+    tl_msg_t *new_tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t) + sizeof(uint64_t) * 2);
+    memset(new_tlmsg, 0, sizeof(tl_msg_t) + sizeof(uint64_t) * 2);
+
+    new_tlmsg->header.chan = CHANNEL_A;
+    new_tlmsg->header.opcode = A_PUTFULLDATA_OPCODE;
+    new_tlmsg->header.size = 3;     //TODO 8byte for test
+    new_tlmsg->data[0] = addr;
+    new_tlmsg->data[1] = value;
+
+    while(is_queue_full(e->message_buffer)) 
+        usleep(1000);
+
+    if (enqueue(e->message_buffer, new_tlmsg)) {
+        return 1;
+    } else {
+        free(new_tlmsg);
+        return 0;
+    }
+}
+
 static void print_credit_status(tloe_endpoint_t *e) {
     printf("Open connection is done. Credit %d | %d | %d | %d | %d\n",
         get_credit(&(e->fc), CHANNEL_A), get_credit(&(e->fc), CHANNEL_B),
@@ -195,31 +238,70 @@ static void print_credit_status(tloe_endpoint_t *e) {
         get_credit(&(e->fc), CHANNEL_E));
 }
 
-static int handle_user_input(tloe_endpoint_t *e, char input, int iter, 
-				int fabric_type, int master) {
+
+static int handle_user_input(tloe_endpoint_t *e, char input, int args1, 
+				int args2, int args3, int fabric_type, int master) {
     int ret = 0;
 
     if (input == 's') {
         print_endpoint_status(e);
     } else if (input == 'a') {
         if (!is_conn(e)) return 0;
-        for (int i = 0; i < iter; i++) {
+        for (int i = 0; i < args1; i++) {
             if (!create_and_enqueue_message(e, i)) {
                 break;  // Stop if buffer is full or allocation fails
             }
         }
     } else if (input == 'c') {
-        if (e->master == TYPE_MASTER)
-            open_conn_master(e);
-        else if (e->master == TYPE_SLAVE)
-            open_conn_slave(e);
-        printf("Open connection complete.\n");
+        int is_conn = 0;
+        if (e->master == TYPE_MASTER) {
+            is_conn = open_conn_master(e);
+        } else if (e->master == TYPE_SLAVE) {
+            is_conn = open_conn_slave(e);
+        }
+
+        if (is_conn) {
+            printf("Open connection complete.\n");
+            e->connection = 1;
+        }
     } else if (input == 'd') {
+        int is_conn = 0;
+
+        e->connection = 0;
         if (e->master == TYPE_MASTER)
-            close_conn_master(e);
+            is_conn = close_conn_master(e);
         else if (e->master == TYPE_SLAVE)
-            close_conn_slave(e);
-        printf("Close connection complete.\n");
+            is_conn = close_conn_slave(e);
+
+        if (is_conn) {
+            printf("Close connection complete.\n");
+            tl_handler_init();
+            tloe_endpoint_init(e, fabric_type, master);
+        }
+    } else if (input == 'r') {
+        if (!is_conn(e)) return 0;
+        if (args1 == 0) return 0; 
+        if (args2 == 0) args2 = 1;
+        for (int i = 0; i < args2; i++) {
+            read_memory(e, (uint64_t) args1);
+        }
+    } else if (input == 'w') {
+        if (!is_conn(e)) return 0;
+        if (args1 == 0) return 0; 
+        if (args2 == 0) return 0;
+        if (args3 == 0) args3 = 1;
+
+        for (int i = 0; i< args3; i++) {
+            write_memory(e, (uint64_t) args1, (uint64_t) args2);
+        }
+    } else if (input == 't') {
+        if (!is_conn(e)) return 0;
+        for (int i = 0; i < args1; i++) {
+            uint64_t addr = 0x1000 + 0x1000*i;
+            uint64_t value = 0x1000 + i;
+            write_memory(e, addr, value);
+            read_memory(e, addr);
+        }
     } else if (input == 'q') {
         e->is_done = 1;
         printf("Exiting...\n");
@@ -317,7 +399,7 @@ int main(int argc, char *argv[]) {
     TloeEther *ether;
     char input, input_count[32];
     int master_slave;
-    int iter = 0;
+    int args1 = 0, args2 = 0, args3 = 0;
     char dev_name[64] = {0};
     char dest_mac_addr[64] = {0};
     int fabric_type;
@@ -337,6 +419,7 @@ int main(int argc, char *argv[]) {
 
     // Initialize tloe_endpoint
     e = (tloe_endpoint_t *)malloc(sizeof(tloe_endpoint_t));
+    memset((void *)e, 0, sizeof(tloe_endpoint_t));
     tloe_endpoint_init(e, fabric_type, master_slave);
     tloe_fabric_init(e, fabric_type);
 
@@ -352,13 +435,15 @@ int main(int argc, char *argv[]) {
         printf("> ");
         fgets(input_count, sizeof(input_count), stdin);
 
-        if (sscanf(input_count, " %c %d", &input, &iter) < 1) {
+        if (sscanf(input_count, " %c %x %x %x", &input, &args1, &args2, &args3) < 1) {
             printf("Invalid input! Try again.\n");
             continue;
         }
 
-        if (handle_user_input(e, input, iter, fabric_type, master_slave))
+        if (handle_user_input(e, input, args1, args2, args3, fabric_type, master_slave))
             break;
+
+        args1 = args2 = args3 = 0;
     }
 
     tloe_endpoint_close(e);

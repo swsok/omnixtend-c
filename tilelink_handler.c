@@ -3,6 +3,7 @@
 #include <string.h>
 #include "tloe_frame.h"
 #include "tloe_endpoint.h"
+#include "tloe_common.h"
 #include "tilelink_handler.h"
 #include "util/circular_queue.h"
 
@@ -22,8 +23,8 @@ int tl_handler_init() {
         fprintf(stderr, "Memory allocation failed\n");
         goto out;
     }
-
     memset(mem_storage, 0, MEM_SIZE);
+
 out:
     return 0;
 }
@@ -43,40 +44,66 @@ typedef void (*tl_handler_fn)(tloe_endpoint_t *e, tl_msg_t *tl);
 void handle_A_PUTFULLDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
     // Write data to memory
     int data_size = 1 << (tl->header.size);
-    int mem_offset = (tl->address) % MEM_SIZE;
-    memcpy(mem_storage + mem_offset, tl->data, data_size);
+    uint64_t mem_offset = ((uint64_t)(tl->data[0]) % MEM_SIZE);
+    BUG_ON((mem_offset + data_size) > MEM_SIZE, "TL_Handler: Memory access out of bounds\n");
+    memcpy(mem_storage + mem_offset, &(tl->data[1]), data_size);
 
     // Make tilelink response(AccessAck) and set data
-	tl_msg_t *tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));	
-	tlmsg->header.chan = CHANNEL_D;
-	tlmsg->header.opcode = D_ACCESSACK_OPCODE;
+    tl_msg_t *tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));	
+    memset((void *)tlmsg, 0, sizeof(tl_msg_t));
+
+    tlmsg->header.chan = CHANNEL_D;
+    tlmsg->header.opcode = D_ACCESSACK_OPCODE;
+    tlmsg->header.size = 0;
+    tlmsg->header.source = tl->header.source;
 
     if (!enqueue(e->response_buffer, tlmsg)) {
-		fprintf(stderr, "Failed to enqueue packet, buffer is full.\n");
-		e->drop_response_cnt++;
-		free(tlmsg);
+        fprintf(stderr, "Failed to enqueue packet, buffer is full.\n");
+        e->drop_response_cnt++;
+        free(tlmsg);
     }
+    printf("%s Data received!\n", __func__);
 }
 
 void handle_A_GET_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
     // Read data from memory
     int data_size = 1 << (tl->header.size);
-    uint64_t *data = (uint64_t *)malloc(sizeof(uint64_t) * data_size);
-    memcpy(data, mem_storage, data_size);
+    uint64_t mem_offset = ((uint64_t)(tl->data[0]) % MEM_SIZE);
+    BUG_ON((mem_offset + data_size) > MEM_SIZE, "TL_Handler: Memory access out of bounds\n");
 
     // Make tilelink response(AccessAckData) and set data
-	tl_msg_t *tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));	
-	tlmsg->header.chan = CHANNEL_D;
-	tlmsg->header.opcode = D_ACCESSACKDATA_OPCODE;
+    tl_msg_t *tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t) + data_size);	
+    memset((void *)tlmsg, 0, sizeof(tl_msg_t) + data_size);
 
-	if (!enqueue(e->response_buffer, tlmsg)) {
-		fprintf(stderr, "Failed to enqueue packet, buffer is full.\n");
-		e->drop_response_cnt++;
-		free(data);
-		free(tlmsg);
-	}
+    tlmsg->header.chan = CHANNEL_D;
+    tlmsg->header.opcode = D_ACCESSACKDATA_OPCODE;
+    tlmsg->header.size = tl->header.size;
+    memcpy(&(tlmsg->data[0]), mem_storage + mem_offset, data_size);
+    tlmsg->header.source = tl->header.source;
 
-    free(data);
+    if (!enqueue(e->response_buffer, tlmsg)) {
+        fprintf(stderr, "Failed to enqueue packet, buffer is full.\n");
+        e->drop_response_cnt++;
+        free(tlmsg);
+    }
+
+    printf("%s Data received!\n", __func__);
+}
+
+void handle_D_ACCESSACK_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
+    // Do nothing TODO
+    e->accessack_cnt++;
+}
+
+void handle_D_ACCESSACKDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
+    uint64_t result = 0;
+    int size = (((1ULL << tl->header.size) + 7 ) / 8);
+
+    result = (uint64_t)tl->data[0];
+
+    printf("0x%lX\n", result);
+
+    e->accessackdata_cnt++;
 }
 
 static void handle_null_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
@@ -135,14 +162,14 @@ tl_handler_fn tl_handler_table[CHANNEL_NUM][TL_OPCODE_NUM] = {
     },
 	// Channel D
     {
-        handle_debug_opcode,          // D_ACCESSACK
-        handle_null_opcode,           // D_ACCESSACKDATA
-        handle_debug_opcode,          // D_HINTACK
-        handle_debug_opcode,          // D_GRANT
-        handle_debug_opcode,          // D_GRANTDATA
-        handle_debug_opcode,          // D_RELEASEACK
-        handle_debug_opcode,          // NOT USED
-        handle_debug_opcode,          // NOT USED
+        handle_D_ACCESSACK_opcode,      // D_ACCESSACK
+        handle_D_ACCESSACKDATA_opcode,  // D_ACCESSACKDATA
+        handle_debug_opcode,            // D_HINTACK
+        handle_debug_opcode,            // D_GRANT
+        handle_debug_opcode,            // D_GRANTDATA
+        handle_debug_opcode,            // D_RELEASEACK
+        handle_debug_opcode,            // NOT USED
+        handle_debug_opcode,            // NOT USED
     },
 	// Channel E
     {

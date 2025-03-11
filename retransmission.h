@@ -18,11 +18,13 @@
 
 typedef struct {
     int state;
+    int f_size;
     time_t send_time;
     tloe_frame_t tloe_frame;
 } RetransmitBufferElement;
 
 int retransmit(tloe_endpoint_t *, int);
-void slide_window(tloe_endpoint_t *, int);
+void slide_window(tloe_endpoint_t *, tloe_frame_t *);
+RetransmitBufferElement *get_earliest_element(CircularQueue *retransmit_buffer);
 
 #endif // __RETRANSISSION_H__
