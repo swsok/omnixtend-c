@@ -89,8 +89,6 @@ static void serve_duplicate_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloef
             seq_num, e->next_rx_seq);
 
     // If the received frame contains data, enqueue it in the message buffer
-    BUG_ON(is_zero_tl_frame(recv_tloeframe, size), "received frame must not be an ack frame.");
-
     *tloeframe = *recv_tloeframe;
     tloeframe->header.seq_num_ack = recv_tloeframe->header.seq_num;
     tloeframe->header.ack = TLOE_ACK;  // ACK
@@ -116,8 +114,6 @@ static void serve_oos_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, 
             recv_tloeframe->header.seq_num, e->next_rx_seq, last_proper_rx_seq);
 
     // If the received frame contains data, enqueue it in the message buffer
-    //BUG_ON(is_zero_tl_frame(recv_tloeframe, size), "received frame must not be an ack frame.");
-
     *tloeframe = *recv_tloeframe;
     tloe_seqnum_set_frame_seq_num_ack(tloeframe, last_proper_rx_seq);
     tloeframe->header.ack = TLOE_NAK;  // NAK
