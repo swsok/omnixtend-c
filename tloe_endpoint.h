@@ -50,11 +50,6 @@ typedef struct tloe_endpoint_struct {
     int accessack_cnt;
     int accessackdata_cnt;
 
-	int fc_inc_cnt;
-	int fc_inc_value;
-	int fc_dec_cnt;
-	int fc_dec_value;
-
     int ackonly_cnt;
 
 	int drop_npacket_size;

@@ -113,15 +113,8 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 
     // Decrease credit based on the tilelink message
     if (request_normal_tlmsg) {
-        int credit;
-
-#if DEBUG
-        DEBUG_PRINT("credit [A][%d] [D][%d]\n", e->fc.credits[CHANNEL_A], e->fc.credits[CHANNEL_D]);
-#endif
         // Send tlmsg if credit is available 
-        if ((credit = fc_credit_dec(&(e->fc), request_normal_tlmsg)) != -1) {
-            e->fc_dec_cnt++;
-            e->fc_dec_value += credit; 
+        if (fc_credit_dec(&(e->fc), request_normal_tlmsg) != -1) {
         // If credit is not available but ack_buffer contains data, send credit using a zero-tlmsg
         } else if (!is_queue_empty(e->ack_buffer)) {
             return_tlmsg = request_normal_tlmsg;

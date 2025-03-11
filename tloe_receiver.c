@@ -28,25 +28,6 @@ static void serve_ack(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
     }
 }
 
-static int add_channel_flow_credits(tloe_endpoint_t *e, int channel, int total_flits) {
-    e->fc.tx_flow_credits[channel] += total_flits;
-}
-
-static void update_flow_control_credits(tloe_endpoint_t *e, tloe_frame_t *frame) {
-    int prev_credit = e->fc.credits[frame->header.chan];
-    int inc_credit = fc_credit_inc(&(e->fc), frame);
-
-    if (inc_credit != -1) {
-#if DEBUG
-        DEBUG_PRINT("INCREASE credit : chan: %d,  %d  ->  %d (%d)\n", 
-                frame->header.chan, prev_credit, 
-                e->fc.credits[frame->header.chan], e->fc_inc_cnt);
-#endif
-        e->fc_inc_cnt++;
-        e->fc_inc_value += inc_credit;
-    }
-}
-
 static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, int f_size) {
     // Handle TileLink Msg
     int i, total_flits = 0;
@@ -81,10 +62,10 @@ static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe
     }
 
     // Apply the calculated total flits (used credit) to the channel
-    add_channel_flow_credits(e, tlmsg->header.chan, total_flits);
+    add_channel_flow_credits(&(e->fc), tlmsg->header.chan, total_flits);
 
     // Increase credit
-    update_flow_control_credits(e, recv_tloeframe);
+    fc_credit_inc(&(e->fc), recv_tloeframe);
 }
 
 static int serve_zero_tlmsg_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
@@ -95,7 +76,7 @@ static int serve_zero_tlmsg_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloef
     // Set for sending ackonly
     e->should_send_ackonly_frame = true;
     // Increase credit
-    update_flow_control_credits(e, recv_tloeframe);
+    fc_credit_inc(&(e->fc), recv_tloeframe);
 }
 
 static void serve_duplicate_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, int size) {
@@ -157,8 +138,6 @@ static void debug_print_receive_frame(tloe_frame_t *recv_tloeframe) {
 
 void RX(tloe_endpoint_t *e) {
     int size;
-    chan_credit_t chan_credit;
-    int inc_credit;
     tloe_rx_req_type_t req_type;
     char recv_buffer[MAX_BUFFER_SIZE];
     tloe_frame_t *recv_tloeframe = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
@@ -206,8 +185,6 @@ void RX(tloe_endpoint_t *e) {
     req_type = tloe_rx_get_req_type(e, recv_tloeframe);
     switch (req_type) {
         case REQ_NORMAL:
-            int inc_credit;
-
 #ifdef TEST_NORMAL_FRAME_DROP
             if ((rand() % 10000) == 99) {
                 e->drop_cnt++;

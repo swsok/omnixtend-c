@@ -64,5 +64,3 @@ void tloe_seqnum_set_frame_seq_num_ack(tloe_frame_t *tloeframe, uint32_t seq_num
     tloeframe->header.seq_num_ack = seq_num_ack;
 }
 
-
-

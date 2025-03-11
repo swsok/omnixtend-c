@@ -9,7 +9,9 @@ void init_flowcontrol(flowcontrol_t *fc) {
 	for (int i=0; i<CHANNEL_NUM; i++) { 
 		set_credit(fc, i, CREDIT_INIT);	
         fc->inc_cnt[i] = 0;
+        fc->inc_value[i] = 0;
         fc->dec_cnt[i] = 0;
+        fc->dec_value[i] = 0;
     }
 }
 
@@ -51,13 +53,11 @@ int check_all_channels(flowcontrol_t *fc) {
 }
 
 // Function to decrease credits if sufficient, otherwise return -1
-int try_dec_credits(flowcontrol_t *fc, int tl_chan, int amount) {
+int try_dec_credits(flowcontrol_t *fc, int tl_chan, int credit) {
     int result;
-    if (fc->credits[tl_chan] < amount) {
+    if (fc->credits[tl_chan] < credit) {
         result = -1;  // Not enough credit
     } else {
-        fc->credits[tl_chan] -= amount;
-        fc->dec_cnt[tl_chan] -= amount;
         result = fc->credits[tl_chan];  // Return remaining credit
     }    
 
@@ -65,30 +65,57 @@ int try_dec_credits(flowcontrol_t *fc, int tl_chan, int amount) {
 }
 
 int fc_credit_inc(flowcontrol_t *fc, tloe_frame_t *tloeframe) {
+    int tl_chan = tloeframe->header.chan;
+    int prev_credit = fc->credits[tl_chan];
     int inc_credit = -1;
     
-    if (tloeframe->header.chan != 0) { 
+    if (tl_chan != 0) 
         inc_credit = (1 << tloeframe->header.credit);
-        fc->credits[tloeframe->header.chan] += inc_credit;
-        fc->inc_cnt[tloeframe->header.chan] += inc_credit;
+
+    if (inc_credit != -1) {
+#if DEBUG
+        DEBUG_PRINT("INCREASE credit : chan: %d,  %d  ->  %d (%d)\n",
+                tl_chan, prev_credit, fc->credits[tl_chan], fc->inc_cnt[tl_chan]);
+#endif
+        fc->credits[tl_chan] += inc_credit;
+        fc->inc_cnt[tl_chan]++;
+        fc->inc_value[tl_chan] += inc_credit;
     }
 
     return inc_credit;
 }
 
 int fc_credit_dec(flowcontrol_t *fc, tl_msg_t *tlmsg) {
-    int tl_chan = tlmsg->header.chan;
     int available_credit;
-    int dec_credit = tlmsg_get_flits_cnt(tlmsg);
+    int tl_chan = tlmsg->header.chan;
+    int prev_credit = fc->credits[tl_chan];
+    int dec_credit = -1;
+
+    if (tl_chan != 0) 
+        dec_credit = tlmsg_get_flits_cnt(tlmsg);
 
     if ((available_credit = try_dec_credits(fc, tl_chan, dec_credit)) == -1) 
         dec_credit = -1; 
+
+    if (dec_credit != -1) {
+#if DEBUG
+        DEBUG_PRINT("DECREASE credit : chan: %d,  %d  ->  %d (%d)\n",
+                tl_chan, prev_credit, fc->credits[tl_chan], fc->dec_cnt[tl_chan]);
+#endif
+        fc->credits[tl_chan] -= dec_credit;
+        fc->dec_cnt[tl_chan]++;
+        fc->dec_value[tl_chan] += dec_credit;
+    }
 
     return dec_credit;
 }
 
 int get_credit(flowcontrol_t *fc, const int channel) {
     return fc->credits[channel];
+}
+
+int add_channel_flow_credits(flowcontrol_t *fc, int channel, int total_flits) {
+    fc->tx_flow_credits[channel] += total_flits;
 }
 
 unsigned int get_outgoing_credits(flowcontrol_t *fc, int chan) {

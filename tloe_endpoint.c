@@ -65,11 +65,6 @@ static void tloe_endpoint_init(tloe_endpoint_t *e, int fabric_type, int master_s
     e->accessack_cnt = 0;
     e->accessackdata_cnt = 0;
 
-	e->fc_inc_cnt = 0;
-	e->fc_inc_value = 0;
-	e->fc_dec_cnt = 0;
-	e->fc_dec_value = 0;
-
     e->ackonly_cnt = 0;
 
 	e->drop_tlmsg_cnt = 0;
@@ -150,8 +145,8 @@ static void print_endpoint_status(tloe_endpoint_t *e) {
             " Dropped: %d (Normal: %d)\n"
             " ACKONLY: %d\n"
             "Channel Credits [0|A|B|C|D|E]: %d|%d|%d|%d|%d|%d\n"
-            " Flow Control (Inc/Value, Dec/Value): %d/%d, %d/%d\n"
-            " [A][%d][%d]    [D][%d][%d]\n"
+            " Flow Control\n"
+            " [A][%d][%d][%d]    [D][%d][%d][%d]\n"
             "\nBuffer Drops:\n"
             " TL Messages: %d, Responses: %d\n"
             "\nResponse count:\n"
@@ -163,10 +158,9 @@ static void print_endpoint_status(tloe_endpoint_t *e) {
             e->ackonly_cnt,
             e->fc.credits[0], e->fc.credits[CHANNEL_A], e->fc.credits[CHANNEL_B], 
             e->fc.credits[CHANNEL_C], e->fc.credits[CHANNEL_D], 
-            e->fc.credits[CHANNEL_E], e->fc_inc_cnt, e->fc_inc_value,
-            e->fc_dec_cnt, e->fc_dec_value,
-            e->fc.inc_cnt[CHANNEL_A], e->fc.dec_cnt[CHANNEL_A],
-            e->fc.inc_cnt[CHANNEL_D], e->fc.dec_cnt[CHANNEL_D],
+            e->fc.credits[CHANNEL_E],
+            e->fc.inc_cnt[CHANNEL_A], e->fc.dec_cnt[CHANNEL_A], e->fc.inc_value[CHANNEL_A],
+            e->fc.inc_cnt[CHANNEL_D], e->fc.dec_cnt[CHANNEL_D], e->fc.inc_value[CHANNEL_D],
             e->drop_tlmsg_cnt, e->drop_response_cnt,
             e->accessack_cnt, e->accessackdata_cnt); 
 }

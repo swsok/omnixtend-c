@@ -9,22 +9,26 @@
 #define CREDIT_DEFAULT 10
 
 typedef struct {
-  unsigned int credits[CHANNEL_NUM];
-  unsigned int tx_flow_credits[CHANNEL_NUM];
+    unsigned int credits[CHANNEL_NUM];
+    unsigned int tx_flow_credits[CHANNEL_NUM];
 
-  int inc_cnt[CHANNEL_NUM];
-  int dec_cnt[CHANNEL_NUM];
+    int inc_cnt[CHANNEL_NUM];
+    int inc_value[CHANNEL_NUM];
+    int dec_cnt[CHANNEL_NUM];
+    int dec_value[CHANNEL_NUM];
 } flowcontrol_t;
 
 void init_flowcontrol(flowcontrol_t *);
 void set_credit(flowcontrol_t *, int, int);
 int is_filled_credit(flowcontrol_t *, int);
 int check_all_channels(flowcontrol_t *);
-int get_credit(flowcontrol_t *fc, const int channel);
+int get_credit(flowcontrol_t *, const int);
 int cal_flits(tl_msg_t *);
 int fc_credit_inc(flowcontrol_t *, tloe_frame_t *);
 int fc_credit_dec(flowcontrol_t *, tl_msg_t *);
-void fc_credit_print(flowcontrol_t *fc);
+void fc_credit_print(flowcontrol_t *);
+int fc_credit_update(flowcontrol_t *, tloe_frame_t *);
+int add_channel_flow_credits(flowcontrol_t *, int, int);
 unsigned int get_outgoing_credits(flowcontrol_t *, int);
 
 static inline int select_max_credit_channel(flowcontrol_t *fc) {
