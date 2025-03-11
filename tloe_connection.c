@@ -140,6 +140,7 @@ int open_conn_master(tloe_endpoint_t *ep) {
     }
 
     send_frame(ep, TYPE_NORMAL, ep->next_tx_seq, tloe_seqnum_prev(ep->next_rx_seq), 0, 0);
+    tloe_seqnum_next_tx_seq_inc(ep);
 
     return is_done;
 }
