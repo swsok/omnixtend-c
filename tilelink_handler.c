@@ -184,14 +184,17 @@ tl_handler_fn tl_handler_table[CHANNEL_NUM][TL_OPCODE_NUM] = {
     },
 };
 
-void tl_handler(tloe_endpoint_t *e) {
+int tl_handler(tloe_endpoint_t *e, int *chan, int *credit) {
     tl_msg_t *tlmsg = NULL;
+    int ret;
     uint8_t tl_chan;
     uint8_t tl_opcode;
 
     // Skip processing if TileLink message buffer is empty or response buffer is full
-    if (is_queue_empty(e->tl_msg_buffer) || is_queue_full(e->response_buffer))
+    if (is_queue_empty(e->tl_msg_buffer) || is_queue_full(e->response_buffer)) {
+	ret = 0;
         goto out;
+    }
 
     // Get next message from the message buffer
     tlmsg = (tl_msg_t *)dequeue(e->tl_msg_buffer); 
@@ -200,10 +203,15 @@ void tl_handler(tloe_endpoint_t *e) {
     tl_chan = tlmsg->header.chan;
     tl_opcode = tlmsg->header.opcode;
 
+    *chan = tlmsg->header.chan;
+    *credit = tlmsg_get_flits_cnt(tlmsg);
+
     // Process message by calling the appropriate handler function based on channel and opcode
     tl_handler_table[tl_chan][tl_opcode](e, tlmsg);
 
     free(tlmsg);
+    ret = 1;
 out:
+    return ret;
 }
 

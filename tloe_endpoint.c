@@ -113,6 +113,7 @@ out:
 }
 
 void *tloe_endpoint(void *arg) {
+	int chan, credit;
 	tloe_endpoint_t *e = (tloe_endpoint_t *)arg;
 
 	tl_msg_t *request_tlmsg = NULL;
@@ -138,7 +139,9 @@ void *tloe_endpoint(void *arg) {
 
 		RX(e);
 
-		tl_handler(e);
+		if (tl_handler(e, &chan, &credit) == 0)
+			continue;
+		add_channel_flow_credits(&(e->fc), chan, credit);
 	}
 }
 

@@ -5,6 +5,6 @@
 
 int tl_handler_init();
 void tl_handler_close();
-void tl_handler();
+int tl_handler(tloe_endpoint_t *, int *, int*);
 
 #endif // __TILELINK_HANDLER_H__

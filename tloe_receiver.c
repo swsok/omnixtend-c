@@ -55,17 +55,11 @@ static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe
                 fprintf(stderr, "tl_msg_buffer overflow.\n");
                 exit(1);
             }
-
-            // Calculate flits for sending ack for flow-control
-            total_flits += tlmsg_get_flits_cnt(tlmsg);
         }
 
         mask >>= 1;
         i++;
     }
-
-    // Apply the calculated total flits (used credit) to the channel
-    add_channel_flow_credits(&(e->fc), tlmsg->header.chan, total_flits);
 
     // Increase credit
     fc_credit_inc(&(e->fc), recv_tloeframe);
