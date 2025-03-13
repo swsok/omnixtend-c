@@ -62,7 +62,9 @@ void handle_A_PUTFULLDATA_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
         e->drop_response_cnt++;
         free(tlmsg);
     }
+#ifdef DEBUG
     printf("%s Data received!\n", __func__);
+#endif
 }
 
 void handle_A_GET_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
@@ -86,8 +88,9 @@ void handle_A_GET_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
         e->drop_response_cnt++;
         free(tlmsg);
     }
-
+#ifdef DEBUG
     printf("%s Data received!\n", __func__);
+#endif
 }
 
 void handle_D_ACCESSACK_opcode(tloe_endpoint_t *e, tl_msg_t *tl) {
