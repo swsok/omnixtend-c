@@ -78,6 +78,9 @@ void print_command_help(void)
     printf("  start, run, r   - Start tloe_ns thread\n");
     printf("  stop, halt, h   - Stop tloe_ns thread\n");
     printf("  flush, f        - Flush message queues\n");
+    printf("  a <count>       - Drop next <count> requests from Port A to B\n");
+    printf("  b <count>       - Drop next <count> requests from Port B to A\n");
+    printf("  w <count>       - Drop next <count> requests bi-directionally\n");
     printf("  quit, q         - Quit program\n");
 }
 
@@ -126,6 +129,27 @@ int main(int argc, char **argv)
             tloe_ns_thread_stop();
         } else if (strcmp(cmd, "flush") == 0 || strcmp(cmd, "f") == 0) {
             tloe_ns_flush_ports();
+        } else if (strncmp(cmd, "a ", 2) == 0) {
+            int count = atoi(cmd + 2);
+            if (count > 0) {
+                tloe_ns_set_drop_count_a_to_b(count);
+            } else {
+                printf("Invalid count value. Usage: a <positive_number>\n");
+            }
+        } else if (strncmp(cmd, "b ", 2) == 0) {
+            int count = atoi(cmd + 2);
+            if (count > 0) {
+                tloe_ns_set_drop_count_b_to_a(count);
+            } else {
+                printf("Invalid count value. Usage: b <positive_number>\n");
+            }
+        } else if (strncmp(cmd, "w ", 2) == 0) {
+            int count = atoi(cmd + 2);
+            if (count > 0) {
+                tloe_ns_set_drop_count_bidirectional(count);
+            } else {
+                printf("Invalid count value. Usage: b <positive_number>\n");
+            }
         } else if (strcmp(cmd, "quit") == 0 || strcmp(cmd, "q") == 0) {
             if (!tloe_ns_thread_is_done()) {
                 tloe_ns_thread_stop();

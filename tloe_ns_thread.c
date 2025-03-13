@@ -15,6 +15,10 @@ static volatile int is_done = 1;
 static TloeMQ *ep_port_a;
 static TloeMQ *ep_port_b;
 
+// Add drop counters
+static volatile int drop_count_a_to_b = 0;
+static volatile int drop_count_b_to_a = 0;
+
 static int thread_init(const char *queue_name)
 {
     char port_a_queue[MAX_QUEUE_NAME];
@@ -55,6 +59,25 @@ static void thread_close(void)
     }
 }
 
+void tloe_ns_set_drop_count_a_to_b(int count)
+{
+    drop_count_a_to_b = count;
+    printf("Will drop next %d requests from Port A to Port B\n", count);
+}
+
+void tloe_ns_set_drop_count_b_to_a(int count)
+{
+    drop_count_b_to_a = count;
+    printf("Will drop next %d requests from Port B to Port A\n", count);
+}
+
+void tloe_ns_set_drop_count_bidirectional(int count)
+{
+    drop_count_a_to_b = count;
+    drop_count_b_to_a = count;
+    printf("Will drop next %d requests from Port A to Port B and B to A\n", count);
+}
+
 static void *thread_fn(void *arg)
 {
     char buffer[BUFFER_SIZE];
@@ -71,20 +94,32 @@ static void *thread_fn(void *arg)
         // Relay messages from port A to port B
         recv_size_port_a = tloe_mq_recv(ep_port_a, buffer, BUFFER_SIZE);
         if (recv_size_port_a > 0) {
-            // if destination port is full, drop the message
-            if (tloe_mq_send(ep_port_b, buffer, recv_size_port_a) < 0) {
-                fprintf(stderr, "Dropped message of size %zd\n",
-                        recv_size_port_a);
+            if (drop_count_a_to_b > 0) {
+                // Drop the message and decrease counter
+                drop_count_a_to_b--;
+                printf("Dropped message from A to B (%d remaining)\n", drop_count_a_to_b);
+            } else {
+                // Normal relay
+                if (tloe_mq_send(ep_port_b, buffer, recv_size_port_a) < 0) {
+                    fprintf(stderr, "Dropped message of size %zd\n",
+                            recv_size_port_a);
+                }
             }
         }
 
         // Relay messages from port B to port A
         recv_size_port_b = tloe_mq_recv(ep_port_b, buffer, BUFFER_SIZE);
         if (recv_size_port_b > 0) {
-            // if destination port is full, drop the message
-            if (tloe_mq_send(ep_port_a, buffer, recv_size_port_b) < 0) {
-                fprintf(stderr, "Dropped message of size %zd\n",
-                        recv_size_port_b);
+            if (drop_count_b_to_a > 0) {
+                // Drop the message and decrease counter
+                drop_count_b_to_a--;
+                printf("Dropped message from B to A (%d remaining)\n", drop_count_b_to_a);
+            } else {
+                // Normal relay
+                if (tloe_mq_send(ep_port_a, buffer, recv_size_port_b) < 0) {
+                    fprintf(stderr, "Dropped message of size %zd\n",
+                            recv_size_port_b);
+                }
             }
         }
 
@@ -94,7 +129,7 @@ static void *thread_fn(void *arg)
     }
 
     thread_close();
-
+    
     return NULL;
 }
 
