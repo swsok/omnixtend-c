@@ -30,14 +30,14 @@ typedef struct tloe_endpoint_struct {
 
     pthread_t tloe_endpoint_thread;
 
-	int connection;
+	volatile int connection;
 	int master;
-	int is_done;
+	volatile int is_done;
     int fabric_type;
 
-	int next_tx_seq;
-	int next_rx_seq;
-	uint32_t acked_seq;
+	volatile int next_tx_seq;
+	volatile int next_rx_seq;
+	volatile uint32_t acked_seq;
 
     bool should_send_ackonly_frame;
     bool ackonly_frame_sent;

@@ -1,6 +1,6 @@
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
 
 #include "tloe_receiver.h"
 #include "tloe_frame.h"
@@ -10,14 +10,17 @@
 #include "tloe_seq_mgr.h"
 #include "retransmission.h"
 #include "timeout.h"
+#include "tloe_nsm.h"
 
-static void serve_ack(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
+static void serve_ack(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe)
+{
     // Slide retransmission buffer for flushing ancester frames
-    // Note that ACK/NAK transmit the sequence number of the received frame as seq_num_ack
+    // Note that ACK/NAK transmit the sequence number of the received frame as
+    // seq_num_ack
     slide_window(e, recv_tloeframe);
 
     // Additionally, NAK re-transmit the frames in the retransmission buffer
-    if (recv_tloeframe->header.ack == TLOE_NAK)  // NAK
+    if (recv_tloeframe->header.ack == TLOE_NAK) // NAK
         retransmit(e, tloe_seqnum_next(recv_tloeframe->header.seq_num_ack));
 
     e->ack_cnt++;
@@ -47,28 +50,24 @@ static int serve_normal_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe
             // Extract tlmsg from tloeframe located at i
             tlmsg = tloe_get_tlmsg(recv_tloeframe, i);
 
-            // Extract tlmsg from the tloeframe located at index  
-            if (!enqueue(e->tl_msg_buffer, (void *) tlmsg)) { 
+            // Extract tlmsg from the tloeframe located at index
+            if (!enqueue(e->tl_msg_buffer, (void *)tlmsg)) {
                 fprintf(stderr, "tl_msg_buffer overflow.\n");
                 exit(1);
             }
-
-            // Calculate flits for sending ack for flow-control
-            total_flits += tlmsg_get_flits_cnt(tlmsg);
         }
 
         mask >>= 1;
         i++;
     }
 
-    // Apply the calculated total flits (used credit) to the channel
-    add_channel_flow_credits(&(e->fc), tlmsg->header.chan, total_flits);
-
     // Increase credit
     fc_credit_inc(&(e->fc), recv_tloeframe);
 }
 
-static int serve_zero_tlmsg_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe) {
+static int serve_zero_tlmsg_request(tloe_endpoint_t *e,
+                                    tloe_frame_t *recv_tloeframe)
+{
     // Update sequence numbers
     tloe_seqnum_update_next_rx_seq(e, recv_tloeframe);
     tloe_seqnum_update_acked_seq(e, recv_tloeframe);
@@ -79,37 +78,44 @@ static int serve_zero_tlmsg_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloef
     fc_credit_inc(&(e->fc), recv_tloeframe);
 }
 
-static void serve_duplicate_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, int size) {
+static void serve_duplicate_request(tloe_endpoint_t *e,
+                                    tloe_frame_t *recv_tloeframe, int size)
+{
     int enqueued;
     int seq_num = recv_tloeframe->header.seq_num;
     tloe_frame_t *tloeframe = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
     memset((void *)tloeframe, 0, sizeof(tloe_frame_t));
-    fprintf(stderr, "TLoE frame is a duplicate. "
+    fprintf(stderr,
+            "TLoE frame is a duplicate. "
             "seq_num: %d, next_rx_seq: %d\n",
             seq_num, e->next_rx_seq);
 
     // If the received frame contains data, enqueue it in the message buffer
     *tloeframe = *recv_tloeframe;
     tloeframe->header.seq_num_ack = recv_tloeframe->header.seq_num;
-    tloeframe->header.ack = TLOE_ACK;  // ACK
+    tloeframe->header.ack = TLOE_ACK; // ACK
     tloeframe->header.chan = 0;
-    tloeframe->header.credit = 0; 
+    tloeframe->header.credit = 0;
     tloe_set_mask(tloeframe, 0, size);
-    enqueued = enqueue(e->ack_buffer, (void *) tloeframe);
+    enqueued = enqueue(e->ack_buffer, (void *)tloeframe);
     BUG_ON(!enqueued, "failed to enqueue ack frame.");
 
     e->dup_cnt++;
 }
 
-static void serve_oos_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, int size, uint32_t seq_num) {
+static void serve_oos_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe,
+                              int size, uint32_t seq_num)
+{
     int enqueued;
-    // The received TLoE frame is out of sequence, indicating that some frames were lost
-    // The frame should be dropped, NEXT_RX_SEQ is not updated
-    // A negative acknowledgment (NACK) is sent using the last properly received sequence number
+    // The received TLoE frame is out of sequence, indicating that some frames
+    // were lost The frame should be dropped, NEXT_RX_SEQ is not updated A
+    // negative acknowledgment (NACK) is sent using the last properly received
+    // sequence number
     uint32_t last_proper_rx_seq = seq_num;
     tloe_frame_t *tloeframe = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
     memset((void *)tloeframe, 0, sizeof(tloe_frame_t));
-    fprintf(stderr, "TLoE frame is out of sequence with "
+    fprintf(stderr,
+            "TLoE frame is out of sequence with "
             "seq_num: %d, next_rx_seq: %d, last: %d\n",
             recv_tloeframe->header.seq_num, e->next_rx_seq, last_proper_rx_seq);
 
@@ -119,26 +125,31 @@ static void serve_oos_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe, 
     tloeframe->header.ack = TLOE_NAK;  // NAK
     tloe_set_mask(tloeframe, 0, size);
     tloeframe->header.chan = 0;
-    tloeframe->header.credit = 0; 
-    enqueued = enqueue(e->ack_buffer, (void *) tloeframe);
+    tloeframe->header.credit = 0;
+    enqueued = enqueue(e->ack_buffer, (void *)tloeframe);
     BUG_ON(!enqueued, "failed to enqueue ack frame.");
 
     e->oos_cnt++;
 }
 
-static void debug_print_receive_frame(tloe_frame_t *recv_tloeframe) {
+static void debug_print_receive_frame(tloe_frame_t *recv_tloeframe)
+{
 #ifdef DEBUG
-    DEBUG_ON("#(RX) receive packet seq_num: %d, seq_num_ack: %d\n", recv_tloeframe->header.seq_num, recv_tloeframe->header.seq_num_ack);
+    DEBUG_ON("#(RX) receive packet seq_num: %d, seq_num_ack: %d\n",
+             recv_tloeframe->header.seq_num,
+             recv_tloeframe->header.seq_num_ack);
 #endif
 }
 
-void RX(tloe_endpoint_t *e) {
+void RX(tloe_endpoint_t *e)
+{
     int size;
     tloe_rx_req_type_t req_type;
     char recv_buffer[MAX_BUFFER_SIZE];
     tloe_frame_t *recv_tloeframe = (tloe_frame_t *)malloc(sizeof(tloe_frame_t));
     if (!recv_tloeframe) {
-        fprintf(stderr, "%s[%d] failed to allocate memory for recv_tloeframe\n", __FILE__, __LINE__);
+        fprintf(stderr, "%s[%d] failed to allocate memory for recv_tloeframe\n",
+                __FILE__, __LINE__);
         goto out;
     }
     memset((void *)recv_tloeframe, 0, sizeof(tloe_frame_t));
@@ -164,30 +175,18 @@ void RX(tloe_endpoint_t *e) {
         goto out;
     }
 
-
-#ifdef TEST_TIMEOUT_DROP // (Test) Delayed ACK: Drop a certain number of normal packets
-    if (e->master == 0) {
-        if (e->drop_npacket_size == 0 && ((rand() % 1000) == 0))
-            e->drop_npacket_size = 4;
-        if (e->drop_npacket_size > 0) {
-            e->drop_npacket_cnt++;
-            e->drop_npacket_size--;
-            free(recv_tloeframe);
-            goto out;
-        }
+    if (handle_normal_frame_drop(e)) {
+        free(recv_tloeframe);
+        goto out;
     }
-#endif
 
     req_type = tloe_rx_get_req_type(e, recv_tloeframe);
     switch (req_type) {
-        case REQ_NORMAL:
-#ifdef TEST_NORMAL_FRAME_DROP
-            if ((rand() % 10000) == 99) {
-                e->drop_cnt++;
-                free(recv_tloeframe);
-                goto out;
-            }
-#endif
+	case REQ_NORMAL:
+        if (handle_single_normal_frame_drop(e)) {
+            free(recv_tloeframe);
+            goto out;
+        }
             // Normal packet
             if (!is_zero_tl_frame(recv_tloeframe, size)) {
                 // Handle and enqueue it into the message buffer
@@ -195,19 +194,20 @@ void RX(tloe_endpoint_t *e) {
                 serve_normal_request(e, recv_tloeframe, size);
             } else {
             // Zero tilelink frame
-                serve_zero_tlmsg_request(e, recv_tloeframe);
-            }
-            free(recv_tloeframe);
-            break;
-        case REQ_DUPLICATE:
-            serve_duplicate_request(e, recv_tloeframe, size);
-            free(recv_tloeframe);
-            break;
-        case REQ_OOS:
-            // recv_tloeframe is not freed here because of the enqueue
-            serve_oos_request(e, recv_tloeframe, size, tloe_seqnum_prev(e->next_rx_seq));
-            free(recv_tloeframe);
-            break;
+            serve_zero_tlmsg_request(e, recv_tloeframe);
+        }
+        free(recv_tloeframe);
+        break;
+    case REQ_DUPLICATE:
+        serve_duplicate_request(e, recv_tloeframe, size);
+        free(recv_tloeframe);
+        break;
+    case REQ_OOS:
+        // recv_tloeframe is not freed here because of the enqueue
+        serve_oos_request(e, recv_tloeframe, size,
+                          tloe_seqnum_prev(e->next_rx_seq));
+        free(recv_tloeframe);
+        break;
     }
 out:
 }

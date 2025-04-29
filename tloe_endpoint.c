@@ -92,21 +92,28 @@ static void tloe_endpoint_close(tloe_endpoint_t *e) {
 	delete_queue(e->response_buffer);
 }
 
-// Select data to process from buffers based on priority order  
-// ack_buffer -> response_buffer -> message_buffer
+// Select data to process from buffers based on priority order
+// response_buffer -> message_buffer, however, we need to consider
+// the starvation issue on message_buffer
+static int buffer_select_counter = 4;
 static tl_msg_t *select_buffer(tloe_endpoint_t *e) {
-	tl_msg_t *tlmsg = NULL;
+	tl_msg_t *tlmsg;
 
-	tlmsg = (tl_msg_t *) dequeue(e->response_buffer);
-	if (tlmsg) 
-		goto out;
+	if (--buffer_select_counter > 0) {
+		tlmsg = (tl_msg_t *) dequeue(e->response_buffer);
+		if (tlmsg) {
+			goto out;
+		}
+	}
 
 	tlmsg = (tl_msg_t *) dequeue(e->message_buffer);
+	buffer_select_counter = 4;
 out:
 	return tlmsg;
 }
 
 void *tloe_endpoint(void *arg) {
+	int chan, credit;
 	tloe_endpoint_t *e = (tloe_endpoint_t *)arg;
 
 	tl_msg_t *request_tlmsg = NULL;
@@ -132,7 +139,9 @@ void *tloe_endpoint(void *arg) {
 
 		RX(e);
 
-		tl_handler(e);
+		if (tl_handler(e, &chan, &credit) == 0)
+			continue;
+		add_channel_flow_credits(&(e->fc), chan, credit);
 	}
 }
 
@@ -165,10 +174,10 @@ static void print_endpoint_status(tloe_endpoint_t *e) {
             e->accessack_cnt, e->accessackdata_cnt); 
 }
 
-static int create_and_enqueue_message(tloe_endpoint_t *e, int msg_index) {
+static int create_and_enqueue_message(tloe_endpoint_t *e, uint64_t msg_index) {
     tl_msg_t *new_tlmsg = (tl_msg_t *)malloc(sizeof(tl_msg_t));
     if (!new_tlmsg) {
-        printf("Memory allocation failed at packet %d!\n", msg_index);
+        printf("Memory allocation failed at packet %ld!\n", msg_index);
         return 0;
     }
     memset((void *) new_tlmsg, 0, sizeof(tl_msg_t));
@@ -182,7 +191,7 @@ static int create_and_enqueue_message(tloe_endpoint_t *e, int msg_index) {
 
     if (enqueue(e->message_buffer, new_tlmsg)) {
         if (msg_index % 100 == 0)
-            fprintf(stderr, "Packet %d added to message_buffer\n", msg_index);
+            fprintf(stderr, "Packet %ld added to message_buffer\n", msg_index);
         return 1;
     } else {
         free(new_tlmsg);
@@ -238,8 +247,7 @@ static void print_credit_status(tloe_endpoint_t *e) {
         get_credit(&(e->fc), CHANNEL_E));
 }
 
-
-static int handle_user_input(tloe_endpoint_t *e, char input, int args1, 
+static int handle_user_input(tloe_endpoint_t *e, char input, uint64_t args1, 
 				int args2, int args3, int fabric_type, int master) {
     int ret = 0;
 
@@ -247,7 +255,7 @@ static int handle_user_input(tloe_endpoint_t *e, char input, int args1,
         print_endpoint_status(e);
     } else if (input == 'a') {
         if (!is_conn(e)) return 0;
-        for (int i = 0; i < args1; i++) {
+        for (uint64_t i = 0; i < args1; i++) {
             if (!create_and_enqueue_message(e, i)) {
                 break;  // Stop if buffer is full or allocation fails
             }
@@ -399,7 +407,8 @@ int main(int argc, char *argv[]) {
     TloeEther *ether;
     char input, input_count[32];
     int master_slave;
-    int args1 = 0, args2 = 0, args3 = 0;
+    uint64_t args1 = 0;
+    int args2 = 0, args3 = 0;
     char dev_name[64] = {0};
     char dest_mac_addr[64] = {0};
     int fabric_type;
@@ -424,7 +433,7 @@ int main(int argc, char *argv[]) {
     tloe_fabric_init(e, fabric_type);
 
     // intead of a direct call to tloe_ether_open
-    tloe_fabric_open(e, dev_name, dest_mac_addr);
+    tloe_fabric_open(e, dev_name, dest_mac_addr, 0);
 
     if (pthread_create(&(e->tloe_endpoint_thread), NULL, tloe_endpoint, e) != 0) {
         error_exit("Failed to create tloe endpoint thread");
@@ -435,7 +444,7 @@ int main(int argc, char *argv[]) {
         printf("> ");
         fgets(input_count, sizeof(input_count), stdin);
 
-        if (sscanf(input_count, " %c %x %x %x", &input, &args1, &args2, &args3) < 1) {
+        if (sscanf(input_count, " %c %lx %x %x", &input, &args1, &args2, &args3) < 1) {
             printf("Invalid input! Try again.\n");
             continue;
         }

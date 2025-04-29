@@ -1,3 +1,5 @@
+TARGETS = tloe_endpoint tloe_ns
+
 CC = gcc
 CFLAGS = -g
 LDFLAGS = 
@@ -26,20 +28,28 @@ ifeq ($(WDE),1)
     CFLAGS += -DWDE
 endif
 
-SRC = $(wildcard $(addsuffix /*.c, $(SRC_DIR)))
-OBJ = $(patsubst %.c, %.o, $(SRC))
-TARGET = tloe_endpoint
+SRC_EP = $(filter-out %/tloe_ns.c %/tloe_ns_thread.c, $(wildcard $(addsuffix /*.c, $(SRC_DIR))))
+OBJ_EP = $(patsubst %.c, %.o, $(SRC_EP))
 
-all: $(TARGET)
+SRC_NS = tloe_ns.c tloe_ns_thread.c tloe_mq.c
+OBJ_NS = $(patsubst %.c, %.o, $(SRC_NS))
 
-$(TARGET): $(OBJ)
+all: $(TARGETS) tags
+
+tloe_endpoint: $(OBJ_EP)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+tloe_ns: $(OBJ_NS)
+	$(CC) $(CFLAGS) -o $@ $^
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
+tags:
+	ctags -R $(SRC_DIR)
+
 clean:
-	rm -f $(OBJ) $(TARGET)
+	rm -f $(OBJ_EP) $(OBJ_NS) $(TARGETS)
+	rm -f tags
 
 .PHONY: all clean
-

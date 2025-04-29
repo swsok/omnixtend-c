@@ -14,7 +14,7 @@ typedef struct tloe_mq_struct {
 
 size_t tloe_mq_send(TloeMQ *, char *, size_t);
 size_t tloe_mq_recv(TloeMQ *, char *, size_t);
-TloeMQ *tloe_mq_open(char *, char *);
+TloeMQ *tloe_mq_open(char *, char *, int);
 void tloe_mq_close(TloeMQ *);
 
 #endif // __TLOE_MQ_H__

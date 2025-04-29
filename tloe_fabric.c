@@ -12,8 +12,8 @@ static size_t ether_recv_wrapper(void *handle, char *data, size_t len) {
     return tloe_ether_recv((struct tloe_ether_struct *)handle, data, len);
 }
 
-static void *ether_open_wrapper(char *dev_name, char *ip_addr) {
-    return tloe_ether_open(dev_name, ip_addr);
+static void *ether_open_wrapper(char *dev_name, char *dev_opt, int create_queue) {
+    return tloe_ether_open(dev_name, dev_opt, create_queue);
 }
 
 static void ether_close_wrapper(void *handle) {
@@ -29,8 +29,8 @@ static size_t mq_recv_wrapper(void *handle, char *data, size_t len) {
     return tloe_mq_recv((struct tloe_mq_struct *)handle, data, len);
 }
 
-static void *mq_open_wrapper(char *dev_name, char *ip_addr) {
-    return tloe_mq_open(dev_name, ip_addr);
+static void *mq_open_wrapper(char *dev_name, char *dev_opt, int create_queue) {
+    return tloe_mq_open(dev_name, dev_opt, create_queue);
 }
 
 static void mq_close_wrapper(void *handle) {
@@ -46,7 +46,7 @@ static tloe_fabric_ops_t ether_ops = {
     .handle = NULL,
     .type = TLOE_FABRIC_ETHER,
     .dev_name = NULL,
-    .ip_addr = NULL
+    .dev_opt = NULL
 };
 
 // Message Queue media operations
@@ -58,7 +58,7 @@ static tloe_fabric_ops_t mq_ops = {
     .handle = NULL,
     .type = TLOE_FABRIC_MQ,
     .dev_name = NULL,
-    .ip_addr = NULL
+    .dev_opt = NULL
 };
 
 int tloe_fabric_init(tloe_endpoint_t *ep, tloe_fabric_type_t media_type) {
@@ -89,14 +89,14 @@ size_t tloe_fabric_recv(tloe_endpoint_t *ep, char *data, size_t len) {
     return ep->fabric_ops.recv(ep->fabric_ops.handle, data, len);
 }
 
-int tloe_fabric_open(tloe_endpoint_t *ep, const char *dev_name, const char *ip_addr) {
+int tloe_fabric_open(tloe_endpoint_t *ep, const char *dev_name, const char *dev_opt, int qp) {
     if (ep->fabric_ops.open == NULL)
         return -1;
 
     ep->fabric_ops.dev_name = (char *)dev_name;
-    ep->fabric_ops.ip_addr = (char *)ip_addr;
+    ep->fabric_ops.dev_opt = (char *)dev_opt;
 
-    ep->fabric_ops.handle = ep->fabric_ops.open((char *)dev_name, (char *)ip_addr);
+    ep->fabric_ops.handle = ep->fabric_ops.open((char *)dev_name, (char *)dev_opt, qp);
     return (ep->fabric_ops.handle != NULL) ? 0 : -1;
 }
 

@@ -8,6 +8,7 @@
 #include "tloe_seq_mgr.h"
 #include "retransmission.h"
 #include "timeout.h"
+#include "tloe_nsm.h"
 
 static void send_ackonly_frame(tloe_endpoint_t *e) {
 	char send_buffer[MAX_BUFFER_SIZE];
@@ -139,6 +140,11 @@ tl_msg_t *TX(tloe_endpoint_t *e, tl_msg_t *request_normal_tlmsg) {
 
         ack_frame = (tloe_frame_t *)dequeue(e->ack_buffer);
         tloe_seqnum_set_frame_seq_num_ack(f, ack_frame->header.seq_num_ack);
+
+        if (handle_ack_packet_drop(e, ack_frame)) {
+            free(ack_frame);
+            goto out;
+        }
 
         free(ack_frame);
     }
