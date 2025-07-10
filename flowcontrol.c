@@ -4,6 +4,7 @@
 #include "flowcontrol.h"
 #include "tilelink_msg.h"
 #include "tloe_frame.h"
+#include "tloe_common.h"
 
 void init_flowcontrol(flowcontrol_t *fc) {
 	for (int i=0; i<CHANNEL_NUM; i++) { 
@@ -73,7 +74,7 @@ int fc_credit_inc(flowcontrol_t *fc, tloe_frame_t *tloeframe) {
         inc_credit = (1 << tloeframe->header.credit);
 
     if (inc_credit != -1) {
-#if DEBUG
+#ifdef DEBUG
         DEBUG_PRINT("INCREASE credit : chan: %d,  %d  ->  %d (%d)\n",
                 tl_chan, prev_credit, fc->credits[tl_chan], fc->inc_cnt[tl_chan]);
 #endif
@@ -98,7 +99,7 @@ int fc_credit_dec(flowcontrol_t *fc, tl_msg_t *tlmsg) {
         dec_credit = -1; 
 
     if (dec_credit != -1) {
-#if DEBUG
+#ifdef DEBUG
         DEBUG_PRINT("DECREASE credit : chan: %d,  %d  ->  %d (%d)\n",
                 tl_chan, prev_credit, fc->credits[tl_chan], fc->dec_cnt[tl_chan]);
 #endif

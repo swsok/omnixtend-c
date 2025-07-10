@@ -135,7 +135,7 @@ static void serve_oos_request(tloe_endpoint_t *e, tloe_frame_t *recv_tloeframe,
 static void debug_print_receive_frame(tloe_frame_t *recv_tloeframe)
 {
 #ifdef DEBUG
-    DEBUG_ON("#(RX) receive packet seq_num: %d, seq_num_ack: %d\n",
+    DEBUG_PRINT("#(RX) receive packet seq_num: %d, seq_num_ack: %d",
              recv_tloeframe->header.seq_num,
              recv_tloeframe->header.seq_num_ack);
 #endif

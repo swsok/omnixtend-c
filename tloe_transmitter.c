@@ -71,7 +71,7 @@ static void send_request_normal_frame(tloe_endpoint_t *e, tloe_frame_t *f, int f
 
 static void debug_print_send_frame(tloe_frame_t *f) {
 #ifdef DEBUG
-    DEBUG_ON("*TX Send normal frame: seq_num:%d, seq_num_ack:%d, chan:%d\n", f->header.seq_num, f->header.seq_num_ack, f->header.chan);
+    DEBUG_PRINT("*TX Send normal frame: seq_num:%d, seq_num_ack:%d, chan:%d", f->header.seq_num, f->header.seq_num_ack, f->header.chan);
 #endif
 }
 
