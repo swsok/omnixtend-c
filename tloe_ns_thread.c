@@ -124,8 +124,9 @@ static void *thread_fn(void *arg)
         }
 
         // If no messages are received, sleep for 1ms
-        if (recv_size_port_a + recv_size_port_b < 0)
+        if (recv_size_port_a + recv_size_port_b < 0) {
             usleep(1000);
+	}
     }
 
     thread_close();

@@ -59,7 +59,7 @@ TloeMQ *tloe_mq_open(char *queue_name, char *master, int qflags) {
     const char *tx_suffix, *rx_suffix;
 
     attr.mq_flags = 0;
-    attr.mq_maxmsg = 100;
+    attr.mq_maxmsg = 10; //default max number of linux is 10
     attr.mq_msgsize = TLOE_MQ_MSG_SIZE;
     attr.mq_curmsgs = 0;
 
@@ -76,12 +76,12 @@ TloeMQ *tloe_mq_open(char *queue_name, char *master, int qflags) {
 
     // Create TX queue (blocking mode)
     mq_oflags = ((qflags & TLOE_FABRIC_QFLAGS_CREATE) ? O_CREAT : 0) | O_NONBLOCK;
-    attr.mq_flags = O_NONBLOCK;
+    attr.mq_flags = 0; //mq_open only accepts 0 for mq_flags
     mq_tx = create_message_queue(queue_name, tx_suffix, &attr, mq_oflags);
 
     // Create RX queue (non-blocking mode)
     mq_oflags = ((qflags & TLOE_FABRIC_QFLAGS_CREATE) ? O_CREAT : 0) | O_NONBLOCK;
-    attr.mq_flags = O_NONBLOCK;
+    attr.mq_flags = 0; //mq_open only accepts 0 for mq_flags
     mq_rx = create_message_queue(queue_name, rx_suffix, &attr, mq_oflags);
 
     ether->mq_tx = mq_tx;
